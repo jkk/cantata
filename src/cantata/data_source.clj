@@ -8,4 +8,5 @@
   (delete [this entity-name pred opts])
   (reflect-entities [this])
   (reflect-fields [this entity-name])
+  (reflect-rels [this entity-name])
   (reflect-pk [this entity-name]))

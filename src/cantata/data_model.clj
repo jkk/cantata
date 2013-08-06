@@ -94,16 +94,20 @@
     (->DataModel ents)))
 
 (defn reflect-data-model [data-source & entity-specs]
-  (apply data-model
-         (let [especs (or (not-empty entity-specs)
-                          (cds/reflect-entities data-source))]
-           (for [espec especs]
-             (assoc espec
-                    :fields (or (:fields espec)
-                                (cds/reflect-fields data-source (:name espec)))
-                    :pk (or (:pk espec)
-                            (:name (first (:fields espec)))
-                            (cds/reflect-pk data-source (:name espec))))))))
+  (apply
+    data-model
+    (let [especs (or (not-empty entity-specs)
+                     (cds/reflect-entities data-source))]
+      (for [espec especs]
+        (let [db-name (:db-name espec)]
+          (assoc espec
+                 :fields (or (:fields espec)
+                             (cds/reflect-fields data-source db-name))
+                 :rels (or (:rels espec)
+                           (cds/reflect-rels data-source db-name))
+                 :pk (or (:pk espec)
+                         (:name (first (:fields espec)))
+                         (cds/reflect-pk data-source db-name))))))))
 
 ;;;;
 
