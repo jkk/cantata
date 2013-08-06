@@ -15,9 +15,9 @@
       m
       (assoc m :db-name (guess-db-name (:name m))))))
 
-(defrecord Rel [name ename rk dir])
+(defrecord Rel [name ename key reverse])
 
-(defn guess-rk [rname]
+(defn guess-rel-key [rname]
   (keyword (str (name rname) "-id")))
 
 (defn make-rel [m]
@@ -26,76 +26,67 @@
           ename (:ename m)]
       (cond-> m
               (not ename) (assoc :ename name)
-              (not (:rk m)) (assoc :rk (guess-rk name))
-              (not (:dir m)) (assoc :dir :out)))))
+              (not (:key m)) (assoc :key (guess-rel-key name))
+              (nil? (:reverse m)) (assoc :reverse false)))))
+
+(defrecord Shortcut [name path])
+
+(defn make-shortcut [m]
+  (map->Shortcut m))
 
 (defrecord Entity [name pk fields rels db-name db-schema shortcuts])
 
+(defn ^:private ordered-map-by-name [maps f]
+  (reduce
+    #(assoc %1 (:name %2) (f %2))
+    (om/ordered-map)
+    maps))
+
 (defn make-entity [m]
   (map->Entity
-    (let [fields (reduce
-                   (fn [fields fspec]
-                     (assoc fields (:name fspec) (make-field fspec)))
-                   (om/ordered-map)
-                   (:fields m))
-          rels (reduce
-                 (fn [rels rspec]
-                   (assoc rels (:name rspec) (make-rel rspec)))
-                 (om/ordered-map)
-                 (:rels m))]
+    (let [fields (ordered-map-by-name (:fields m) make-field)
+          rels (ordered-map-by-name (:rels m) make-rel)
+          shortcuts (ordered-map-by-name (:shortcuts m) make-shortcut)]
       (cond-> (assoc m
                      :fields fields
-                     :rels rels)
+                     :rels rels
+                     :shortcuts shortcuts)
               (not (:db-name m)) (assoc :db-name (guess-db-name (:name m)))
-              (not (:pk m)) (assoc :pk (:name (first fields)))))))
+              (not (:pk m)) (assoc :pk (key (first fields)))))))
 
 ;; TODO: caching?
-(defrecord DataModel [entities graph])
+(defrecord DataModel [entities])
 
-(defn ^:private add-outgoing-edge [graph ename rel]
-  (update-in graph [ename (:name rel)] (fnil conj #{}) rel))
+(defn ^:private reverse-rel-name [rel from]
+  (keyword (str "_"
+                (name (:name rel)) "."
+                (name from))))
 
-(defn ^:private reverse-rel-name
-  ([from]
-    (keyword (str "_" (name from))))
-  ([rel from]
-    (keyword (str "_"
-                  (name (:name rel)) "."
-                  (name from)))))
-
-(defn ^:private add-incoming-edges [graph rel from]
+(defn ^:private add-reverse-rels [ents ent rel]
   (let [ename (:ename rel)
+        from (:name ent)
         rrname (reverse-rel-name rel from)
         rrel (make-rel {:name rrname
                         :ename from
-                        :rk (:rk rel)
-                        :dir :in})
+                        :key (:key rel)
+                        :reverse true})
         rrname2 from
         rrel2 (assoc rrel :name rrname2)]
-    (-> graph
-      (update-in [ename rrname] (fnil conj #{}) rrel)
-      (update-in [ename rrname2] (fnil conj #{}) rrel2))))
-
-(defn ^:private add-edges [graph entity]
-  (let [ename (:name entity)]
-    (reduce
-      (fn [g rel]
-        (-> g
-          (add-outgoing-edge ename rel)
-          (add-incoming-edges rel ename)))
-      graph
-      (vals (:rels entity)))))
+    (-> ents
+      (assoc-in [ename :rels rrname] rrel)
+      (update-in [ename :rels rrname2] #(when-not %1 %2) rrel2))))
 
 (defn data-model [& entity-specs]
   ;; TODO: enforce naming uniqueness, check for bad rels
-  (let [[ents g] (reduce
-                   (fn [[ents g] espec]
-                     (let [ent (make-entity espec)]
-                       [(assoc ents (:name ent) ent)
-                        (add-edges g ent)]))
-                   [(om/ordered-map) {}]
-                   entity-specs)]
-    (->DataModel ents g)))
+  (let [ents (ordered-map-by-name entity-specs make-entity)
+        ents (reduce
+               (fn [ents [ent rel]]
+                 (add-reverse-rels ents ent rel))
+               ents
+               (for [ent (vals ents)
+                     rel (vals (:rels ent))]
+                 [ent rel]))]
+    (->DataModel ents)))
 
 (defn reflect-data-model [data-source & entity-specs]
   (apply data-model
@@ -127,57 +118,71 @@
 (defn join-path [& parts]
   (keyword (string/join "." (map name parts))))
 
-(defn resolve-rel [dm ename rname]
-  (let [rels (get-in dm [:graph ename rname])]
-    (cond
-      (empty? rels) (throw (ex-info (str "No such rel " rname
-                                         " for entity " ename)
-                                    {:data-model dm
-                                     :ename ename
-                                     :rname rname}))
-      (< 1 (count rels)) (throw (ex-info (str "Ambiguous rel " rname
-                                              " for entity " ename)
-                                         {:data-model dm
-                                          :ename ename
-                                          :rname rname}))
-      :else (first rels))))
-
 (defrecord Resolved [type value])
 
-;; TODO: shortcuts
 (defn resolve
   ([entity xname]
     (if (identical? xname :*)
       (->Resolved :wildcard :*)
       (if-let [field (get-in entity [:fields xname])]
        (->Resolved :field field)
-       (when-let [rel (get-in entity [:rels xname])]
-         (->Resolved :rel rel)))))
+       (if-let [rel (get-in entity [:rels xname])]
+         (->Resolved :rel rel)
+         (when-let [shortcut (get-in entity [:shortcuts xname])]
+           (->Resolved :shortcut shortcut))))))
   ([dm ename xname]
     (resolve (get-in dm [:entities ename]) xname)))
 
 (defrecord ChainLink [path entity rel])
 
+(defrecord ResolvedPath [chain resolved shortcuts])
+
 (defn resolve-path [dm ename path]
   (loop [chain []
          ename ename
          rnames (split-path path)
-         seen-path []]
-    (if (not (next rnames))
-      {:chain chain
-       :thing (resolve (:entity (peek chain)) (first rnames))}
-      (let [rname (first rnames)
-            rel (resolve-rel dm ename rname)
-            ename* (:ename rel)
-            seen-path* (conj seen-path rname)
-            link (->ChainLink
-                   (apply join-path seen-path*)
-                   (get-in dm [:entities ename*])
-                   rel)]
-        (recur (conj chain link)
-               ename*
-               (rest rnames)
-               seen-path*)))))
+         seen-path []
+         shortcuts {}]
+    (let [entity (get-in dm [:entities ename])
+          rname (first rnames)
+          resolved (or (resolve entity rname)
+                       (throw (ex-info (str "Unknown reference " rname
+                                            " for entity " ename)
+                                       {:data-model dm
+                                        :rname rname
+                                        :ename ename})))]
+      (if (and (not (next rnames))
+               (not= :shortcut (:type resolved)))
+        (->ResolvedPath chain resolved shortcuts)
+        (condp = (:type resolved)
+          :shortcut (let [shortcut-path (-> resolved :value :path)]
+                      (recur chain
+                             ename
+                             (concat (split-path shortcut-path)
+                                     (rest rnames))
+                             seen-path
+                             (assoc shortcuts
+                                    (apply join-path (conj seen-path shortcut-path))
+                                    (apply join-path (conj seen-path
+                                                           (-> resolved :value :name))))))
+          :rel (if (= :rel (:type resolved))
+                 (let [rel (:value resolved)
+                       ename* (:ename rel)
+                       seen-path* (conj seen-path rname)
+                       link (->ChainLink
+                              (apply join-path seen-path*)
+                              (get-in dm [:entities ename*])
+                              rel)]
+                   (recur (conj chain link)
+                          ename*
+                          (rest rnames)
+                          seen-path*
+                          shortcuts)))
+          (throw (ex-info (str "Illegal path part " rname)
+                          {:data-model dm
+                           :rname rname
+                           :resolved resolved
+                           :path path})))))))
 
 
 
@@ -195,8 +200,8 @@
                  :fields [{:name :id}
                           {:name :name}
                           {:name :address}]
-                 :rels [{:name :resident :ename :person :rk :home-id :dir :in}
-                        {:name :worker :ename :person :rk :office-id :dir :in}]}
+                 :shortcuts [{:name :worker :path :_office.person}
+                             {:name :resident :path :_home.person}]}
                 {:name :car
                  :fields [{:name :id}
                           {:name :make}
@@ -206,7 +211,7 @@
                  :fields [{:name :id}
                           {:name :owner-id}
                           {:name :car-id}]
-                 :rels [{:name :owner :ename :person :rk :owner-id}
+                 :rels [{:name :owner :ename :person :key :owner-id}
                         {:name :car}]}))
   
   (def dm
@@ -214,10 +219,10 @@
       :person {:fields [:id :full-name :home-id :office-id]
                :belongs-to [:home {:ename :location}
                             :office {:ename :location}]
-               :has-many [:car {:via :car-ownership :rk :owner-id}]}
+               :has-many [:car {:via :car-ownership :key :owner-id}]}
       :location {:fields [:id :name :address]
-                 :has-many [:resident {:ename :person :rk :home-id}
-                            :worker {:ename :person :rk :office-id}]}
+                 :has-many [:resident {:ename :person :key :home-id}
+                            :worker {:ename :person :key :office-id}]}
       :car {:fields [:id :make :model :year]
             :has-many [:owner {:ename :person :via :car-ownership}]}
       :car-ownership {:fields [:id :owner-id :car-id]
