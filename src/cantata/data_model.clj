@@ -15,7 +15,7 @@
       m
       (assoc m :db-name (guess-db-name (:name m))))))
 
-(defrecord Rel [name ename key reverse])
+(defrecord Rel [name ename key local-key reverse])
 
 (defn guess-rel-key [rname]
   (keyword (str (name rname) "-id")))
@@ -45,14 +45,18 @@
 (defn make-entity [m]
   (map->Entity
     (let [fields (ordered-map-by-name (:fields m) make-field)
-          rels (ordered-map-by-name (:rels m) make-rel)
+          pk (or (:pk m)
+                 (key (first fields)))
+          rels (ordered-map-by-name
+                 (map #(assoc % :local-key pk) (:rels m))
+                 make-rel)
           shortcuts (ordered-map-by-name (:shortcuts m) make-shortcut)]
       (cond-> (assoc m
                      :fields fields
                      :rels rels
                      :shortcuts shortcuts)
               (not (:db-name m)) (assoc :db-name (guess-db-name (:name m)))
-              (not (:pk m)) (assoc :pk (key (first fields)))))))
+              (not (:pk m)) (assoc :pk pk)))))
 
 ;; TODO: caching?
 (defrecord DataModel [entities])
@@ -69,6 +73,7 @@
         rrel (make-rel {:name rrname
                         :ename from
                         :key (:key rel)
+                        :local-key (:local-key rel)
                         :reverse true})
         rrname2 from
         rrel2 (assoc rrel :name rrname2)]
