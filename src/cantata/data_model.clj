@@ -59,8 +59,8 @@
         rrname (reverse-rel-name rel from)
         rrel (make-rel {:name rrname
                         :ename from
-                        :key (:key rel)
-                        :other-key (:other-key rel)
+                        :key (:other-key rel)
+                        :other-key (:key rel)
                         :reverse true})
         rrname2 from
         rrel2 (assoc rrel :name rrname2)]
