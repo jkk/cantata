@@ -39,9 +39,15 @@
         fname (-> v :resolved-path :value :db-name)
         chain (:chain x)]
     (hq/call (:op v)
-             (if (seq chain)
-               (identifier (-> chain peek :to-path) fname quoting)
-               (identifier (-> x :root :name) fname quoting)))))
+             (if (= :* (:path v))
+               (hq/raw "*")
+               (if (seq chain)
+                 (if (cq/wildcard? (:path v))
+                   (hq/raw (str (hq/quote-identifier (-> chain peek :to-path)
+                                                     :style quoting :split false)
+                                ".*"))
+                   (identifier (-> chain peek :to-path) fname quoting))
+                 (identifier (-> x :root :name) fname quoting))))))
 
 (def ^:dynamic *subquery-depth* -1)
 

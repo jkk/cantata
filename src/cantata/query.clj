@@ -219,7 +219,9 @@
   "Returns true if field is a wildcard. E.g., :foo.*"
   [field]
   (and (keyword? field)
-       (.endsWith ^String (name field) ".*")))
+       (let [s ^String (name field)]
+         (.endsWith s ".*")
+         (not (.startsWith s "%")))))
 
 (def aggregate-ops #{:count :min :max :avg :sum :count-distinct
                      :stddev :variance})
