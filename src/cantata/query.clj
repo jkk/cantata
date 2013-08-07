@@ -220,8 +220,8 @@
   [field]
   (and (keyword? field)
        (let [s ^String (name field)]
-         (.endsWith s ".*")
-         (not (.startsWith s "%")))))
+         (and (.endsWith s ".*")
+              (not (.startsWith s "%"))))))
 
 (def aggregate-ops #{:count :min :max :avg :sum :count-distinct
                      :stddev :variance})
