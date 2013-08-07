@@ -59,21 +59,21 @@
        (fn [~cols ~rows]
          ~@body))))
 
-(defn ^:private get-dm-qargs [ds qargs]
-  (if (cdm/data-model? (first qargs))
-    [(first qargs) (rest qargs)]
-    [(::data-model ds) qargs]))
+(defn ^:private get-dm+args [ds args]
+  (if (cdm/data-model? (first args))
+    [(first args) (rest args)]
+    [(::data-model ds) args]))
 
 (defn query*
   [ds & qargs]
-  (let [[dm qargs] (get-dm-qargs ds qargs)]
+  (let [[dm qargs] (get-dm+args ds qargs)]
     (with-query-rows* ds dm qargs
       (fn [cols rows]
         [cols rows]))))
 
 (defn query
   [ds & qargs]
-  (let [[dm qargs] (get-dm-qargs ds qargs)]
+  (let [[dm qargs] (get-dm+args ds qargs)]
     (with-query-rows* ds dm qargs
       (fn [cols rows]
         (mapv #(cu/zip-ordered-map cols %) rows)))))
@@ -93,18 +93,16 @@
 (defn by-id [ds & qargs])
 
 (defn query-count [ds & qargs]
-  (let [[dm qargs] (get-dm-qargs ds qargs)]
+  (let [[dm qargs] (get-dm+args ds qargs)]
     (sql/query-count ds dm qargs)))
 
 (defn query-count* [ds & qargs]
-  (let [[dm qargs] (get-dm-qargs ds qargs)]
+  (let [[dm qargs] (get-dm+args ds qargs)]
     (sql/query-count ds dm qargs :flat true)))
 
 (defn save! [ds dm ename changes opts])
 
 (defn delete! [ds dm ename pred opts])
-
-;; TODO: helper fns - entities, entity, rels, etc - resolve-path - to-sql
 
 (defmacro transaction [binding & body]
   `(jd/db-transaction ~binding ~@body))
@@ -117,3 +115,20 @@
 
 (defmacro rollback? [ds]
   `(jd/db-is-rollback-only ~ds))
+
+(defn to-sql [ds & qargs]
+  (let [[dm qargs] (get-dm+args ds qargs)]
+    (sql/to-sql ds dm qargs)))
+
+;;;;
+
+(defmacro ^:private def-dm-helpers [& fn-names]
+  `(do
+     ~@(for [fn-name fn-names]
+         `(defn ~fn-name [~'ds ~'& ~'args]
+            (let [[dm# args#] (get-dm+args ~'ds ~'args)]
+              (apply ~(symbol "cdm" (name fn-name)) dm# args#))))))
+
+(def-dm-helpers
+  entities entity rels rel fields field field-names)
+
