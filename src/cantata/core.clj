@@ -76,7 +76,7 @@
   (let [[dm qargs] (get-dm-qargs ds qargs)]
     (with-query-rows* ds dm qargs
       (fn [cols rows]
-        (mapv #(zipmap cols %) rows))))) ;TODO: ordered map?
+        (mapv #(cu/zip-ordered-map cols %) rows)))))
 
 (defn- add-limit-1 [qargs]
   (let [qargs1 (first qargs)]
