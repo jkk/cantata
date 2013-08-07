@@ -312,7 +312,9 @@
 (defn- expand-implicit-joins [q resolved-fields env]
   (let [chains (keep (comp seq :chain) resolved-fields)
         joins (mapcat #(build-joins (:chain %) (:shortcuts %))
-                      (filter (comp seq :chain) resolved-fields))
+                      (cu/distinct-key
+                        (comp :to-path peek :chain)
+                        (filter (comp seq :chain) resolved-fields)))
         joins (apply concat (for [[[_ alias :as to] on] (partition 2 joins)
                                   :when (not (env alias))]
                               [to on]))
