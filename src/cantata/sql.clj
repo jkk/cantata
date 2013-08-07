@@ -125,16 +125,16 @@
 
 ;; TODO: traverse into SqlCalls?
 (defn qualify-query [dm quoting q resolved-paths]
-   (binding [*subquery-depth* (inc *subquery-depth*)]
-     (reduce-kv
-       (fn [q clause cval]
-         (let [cval* (qualify-clause clause cval dm quoting resolved-paths)]
-           (if (and (not (nil? cval))
-                    (or (not (coll? cval*))
-                        (seq cval*)))
-             (assoc q clause cval*)
-             q)))
-       q q)))
+  (binding [*subquery-depth* (inc *subquery-depth*)]
+    (reduce-kv
+      (fn [q clause cval]
+        (let [cval* (qualify-clause clause cval dm quoting resolved-paths)]
+          (if (and (not (nil? cval))
+                   (or (not (coll? cval*))
+                       (seq cval*)))
+            (assoc q clause cval*)
+            q)))
+      q q)))
 
 (def subprotocol->quoting
   {"postgresql" :ansi
