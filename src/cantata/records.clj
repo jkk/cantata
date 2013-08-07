@@ -8,4 +8,4 @@
 (defrecord Resolved [type value])
 (defrecord ChainLink [from to from-path to-path rel])
 (defrecord ResolvedPath [root chain resolved shortcuts])
-
+(defrecord AggOp [op path resolved-path])

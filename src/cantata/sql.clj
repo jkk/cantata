@@ -34,6 +34,15 @@
       (identifier (-> chain peek :to-path) fname quoting)
       (identifier (-> x :root :name) fname quoting))))
 
+(defmethod qualify :agg-op [x quoting]
+  (let [v (-> x :resolved :value)
+        fname (-> v :resolved-path :value :db-name)
+        chain (:chain x)]
+    (hq/call (:op v)
+             (if (seq chain)
+               (identifier (-> chain peek :to-path) fname quoting)
+               (identifier (-> x :root :name) fname quoting)))))
+
 (def ^:dynamic *subquery-depth* -1)
 
 (defmulti qualify-clause
@@ -49,7 +58,7 @@
     (throw (ex-info (str "Unrecognized entity name in :from - " from)
                     {:from from}))))
 
-;; TODO: aggs, subqueries
+;; TODO: subqueries
 (defmethod qualify-clause :select [_ select _ quoting rps]
   (for [field select]
     ;; TODO: respect explicit aliases
@@ -57,7 +66,7 @@
       [(qualify rp quoting) (identifier field quoting)]
       field)))
 
-;; TODO: agg, subqueries
+;; TODO: subqueries
 (defn qualify-pred-fields [pred quoting rps]
   (when pred
     (let [fields (cq/get-predicate-fields pred)
@@ -71,7 +80,6 @@
 (defmethod qualify-clause :having [_ where _ quoting rps]
  (qualify-pred-fields where quoting rps))
 
-;; TODO: agg
 (defmethod qualify-clause :order-by [_ order-by _ quoting rps]
  (when order-by
    (for [f order-by]

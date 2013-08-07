@@ -221,13 +221,38 @@
   (and (keyword? field)
        (.endsWith ^String (name field) ".*")))
 
+(def aggregate-ops #{:count :min :max :avg :sum :count-distinct
+                     :stddev :variance})
+
+(def aggregate-re
+  (re-pattern
+    (str "^%(" (string/join "|" (map name aggregate-ops)) ")\\.")))
+
+(defn parse-agg [agg]
+  (when (keyword? agg)
+    (let [s ^String (name agg)]
+      (when (= \% (.charAt s 0))
+        (let [doti (.indexOf s (int \.) (int 0))]
+          (when-not (neg? doti)
+            [(keyword (subs s 1 doti))
+             (keyword (subs s (inc doti)))]))))))
+
+(defn agg [op path]
+  (when-not (aggregate-ops op)
+    (throw (ex-info (str "Invalid aggregate op: " op) {:op op})))
+  (cu/join-path (str "%" (name op)) path))
+
 (defn resolve-path [dm entity qenv path]
   (or
     ;;TODO create Resolved record
     (when (map? path) {})
     (when-let [resolved (get qenv path)]
       (r/->ResolvedPath entity [] resolved nil))
-    (when (get-aggregate-op path) {}) ;;TODO: pass along agg info
+    (when-let [[agg-op agg-path] (parse-agg path)]
+      (when-let [rp (resolve-path dm entity qenv agg-path)]
+        (let [resolved (r/->Resolved
+                         :agg-op (r/->AggOp agg-op agg-path (:resolved rp)))]
+          (r/->ResolvedPath entity (:chain rp) resolved (:shortcuts rp)))))
     (when dm
       (dm/resolve-path dm entity path))))
 
@@ -424,23 +449,6 @@
                                   (clause q))))))
             q [:join :left-join :right-join])]
     q))
-
-(def aggregate-ops #{:count :min :max :avg :sum :count-distinct
-                     :stddev :variance})
-
-(def aggregate-field-re
-  (re-pattern
-    (str "^%(" (string/join "|" (map name aggregate-ops)) ")\\.")))
-
-(defn get-aggregate-op [field]
-  (when-let [op-str (second
-                      (re-find aggregate-field-re (name field)))]
-    (keyword op-str)))
-
-(defn agg [op field]
-  (when-not (aggregate-ops op)
-    (throw (ex-info (str "Invalid aggregate op: " op) {:op op})))
-  (cu/join-path (str "%" (name op)) field))
 
 (defn resolve-paths [dm ent qenv paths]
   (reduce

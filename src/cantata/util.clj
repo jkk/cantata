@@ -35,7 +35,7 @@
 (defn unqualify [path]
   (let [s ^String (name path)
         doti (.lastIndexOf s ".")]
-    (if (= -1 doti)
+    (if (neg? doti)
       [nil path]
       [(keyword (subs s 0 doti))
        (keyword (subs s (inc doti)))])))
