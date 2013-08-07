@@ -124,18 +124,17 @@
  (qualify-join joins quoting rps))
 
 ;; TODO: traverse into SqlCalls?
-(defn prep-q [dm qargs quoting]
-  (let [{:keys [q resolved-paths]} (cq/prep-query dm qargs)]
-    (binding [*subquery-depth* (inc *subquery-depth*)]
-      (reduce-kv
-        (fn [q clause cval]
-          (let [cval* (qualify-clause clause cval dm quoting resolved-paths)]
-            (if (and (not (nil? cval))
-                     (or (not (coll? cval*))
-                         (seq cval*)))
-              (assoc q clause cval*)
-              q)))
-        q q))))
+(defn qualify-query [dm quoting q resolved-paths]
+   (binding [*subquery-depth* (inc *subquery-depth*)]
+     (reduce-kv
+       (fn [q clause cval]
+         (let [cval* (qualify-clause clause cval dm quoting resolved-paths)]
+           (if (and (not (nil? cval))
+                    (or (not (coll? cval*))
+                        (seq cval*)))
+             (assoc q clause cval*)
+             q)))
+       q q)))
 
 (def subprotocol->quoting
   {"postgresql" :ansi
@@ -149,24 +148,31 @@
    "jtds:sqlserver" :sqlserver})
 
 (defn detect-quoting [ds]
-  (if-let [subprot (:subprotocol ds)]
-    (subprotocol->quoting subprot)
-    (let [ds* (:datasource ds)]
-      (when (and ds* (instance? ComboPooledDataSource ds*))
-        (let [url (.getJdbcUrl ^ComboPooledDataSource ds*)]
-          (when-let [subprot (second (re-find #"^([^:]+):"
-                                              (string/replace url #"^jdbc:" "")))]
-            (subprotocol->quoting subprot)))))))
+  (or (:cantata.core/quoting ds)
+      (if-let [subprot (:subprotocol ds)]
+        (subprotocol->quoting subprot)
+        (let [ds* (:datasource ds)]
+          (when (and ds* (instance? ComboPooledDataSource ds*))
+            (let [url (.getJdbcUrl ^ComboPooledDataSource ds*)]
+              (when-let [subprot (second (re-find #"^([^:]+):"
+                                                  (string/replace url #"^jdbc:" "")))]
+                (subprotocol->quoting subprot))))))))
+
+(defn plain-sql? [q]
+  (or (string? q)
+      (and (vector? q) (string? (first q)))
+      (and (sequential? q) (string? (first q)))))
 
 (defn to-sql [ds dm q]
   (cond
    (string? q) [q]
    (and (vector? q) (string? (first q))) q
    (and (sequential? q) (string? (first q))) (vec q)
-   :else (let [quoting (or (:cantata.core/quoting ds)
-                           (detect-quoting ds))]
+   :else (let [quoting (detect-quoting ds)
+               {:keys [q resolved-paths]} (cq/prep-query dm q)]
            (hq/format
-             (prep-q dm q quoting) :quoting quoting))))
+             (qualify-query dm quoting q resolved-paths)
+             :quoting quoting))))
 
 (defn dasherize [s]
   (string/replace s "[^^]_" "-"))
@@ -174,6 +180,7 @@
 (defn undasherize [s]
   (string/replace s "-" "_"))
 
+;;TODO: prepared queries/statements
 (defn query [ds dm q callback]
   (let [sql-params (to-sql ds dm q)
         _ (when cu/*verbose* (prn sql-params))
