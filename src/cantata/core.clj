@@ -92,13 +92,19 @@
 
 (defn by-id [ds & qargs])
 
-(defn query-count [ds dm q])
+(defn query-count [ds & qargs]
+  (let [[dm qargs] (get-dm-qargs ds qargs)]
+    (sql/query-count ds dm qargs)))
+
+(defn query-count* [ds & qargs]
+  (let [[dm qargs] (get-dm-qargs ds qargs)]
+    (sql/query-count ds dm qargs :flat true)))
 
 (defn save! [ds dm ename changes opts])
 
 (defn delete! [ds dm ename pred opts])
 
-;; TODO: accessor fns - entities, entity, rels, etc
+;; TODO: helper fns - entities, entity, rels, etc - resolve-path - to-sql
 
 (defmacro transaction [binding & body]
   `(jd/db-transaction ~binding ~@body))

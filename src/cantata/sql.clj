@@ -189,7 +189,30 @@
                                 :as-arrays? true)]
     (callback cols rows)))
 
-(defn query-count [ds dm q callback])
+(defn query-count [ds dm q & {:keys [flat]}]
+  (when (plain-sql? q)
+    (throw (ex-info "query-count not supported on plain SQL"
+                    {:q q})))
+  (let [quoting (detect-quoting ds)
+        {:keys [q resolved-paths]} (cq/prep-query dm q)
+        ent (cdm/entity dm (:from q))
+        select (if (or flat
+                       (not-any? q [:join :left-join :right-join]))
+                 [(hq/call :count (hq/raw "*"))]
+                 (let [npk (cdm/normalize-pk (:pk ent))
+                       qpk (for [pk npk]
+                             (qualify
+                               (cdm/resolve-path dm ent npk)
+                               quoting))]
+                   [(apply hq/call :count-distinct qpk)]))
+        q (-> q
+            (dissoc :limit :offset)
+            (assoc :select select))
+        sql (hq/format (qualify-query dm quoting q resolved-paths)
+                       :quoting quoting)]
+    (query ds dm sql (fn [_ rows]
+                       (ffirst rows)))))
+
 (defn insert! [ds dm ename changes opts])
 (defn update! [ds dm ename changes pred opts])
 (defn delete! [ds dm ename pred opts])
