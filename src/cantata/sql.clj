@@ -80,8 +80,9 @@
     (callback cols rows)))
 
 (defn query-count [ds dm q callback])
-(defn save [ds dm ename changes opts])
-(defn delete [ds dm ename pred opts])
+(defn insert! [ds dm ename changes opts])
+(defn update! [ds dm ename changes pred opts])
+(defn delete! [ds dm ename pred opts])
 
 ;; TODO: more customizable options
 (defn create-pool [spec]

@@ -94,9 +94,11 @@
 
 (defn query-count [ds dm q])
 
-(defn save [ds dm ename changes opts])
+(defn save! [ds dm ename changes opts])
 
-(defn delete [ds dm ename pred opts])
+(defn delete! [ds dm ename pred opts])
+
+;; TODO: accessor fns - entities, entity, rels, etc
 
 (defmacro transaction [binding & body]
   `(jd/db-transaction ~binding ~@body))
