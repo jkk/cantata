@@ -440,15 +440,19 @@
     (throw (ex-info (str "Invalid aggregate op: " op) {:op op})))
   (cu/join-path (str "%" (name op)) field))
 
-(defn resolve-paths [dm ent paths & [env]]
+(defn resolve-paths [dm ent qenv paths]
   (reduce
     (fn [rps path]
-      (let [rps (assoc rps path (resolve-path dm ent env path))
-            qual (when (keyword? path)
-                   (first (cu/unqualify path)))]
-        (if qual
-          (assoc rps qual (resolve-path dm ent env qual))
-          rps)))
+      (if-let [rp (resolve-path dm ent qenv path)]
+        (let [rps (assoc rps path rp)
+              qual (when (keyword? path)
+                     (first (cu/unqualify path)))]
+          (if qual
+            (assoc rps qual (resolve-path dm ent qenv qual))
+            rps))
+        (throw (ex-info (str "Unrecognized path " path " for entity "
+                             (:name ent))
+                        {:path path :entity ent}))))
     (om/ordered-map)
     paths))
 
@@ -478,13 +482,13 @@
         q (assoc q :select (vec (expand-wildcards dm ent (:select q) qenv)))
         q (if (:without q) (expand-without q) q)
         fields (get-all-fields q)
-        rps (resolve-paths dm ent fields qenv)
+        rps (resolve-paths dm ent qenv fields)
         [q qenv fields rps] (if (false? expand-joins)
                               [q qenv fields rps]
                               (let [q (expand-implicit-joins q (vals rps) qenv)
                                     qenv (merge env (get-query-env dm q))
                                     fields (get-all-fields q)
-                                    rps (resolve-paths dm ent fields nil)]
+                                    rps (resolve-paths dm ent nil fields)]
                                 [q qenv fields rps]))
         subqs (filter map? fields)
         subq-env (assoc qenv (:name ent) (r/->Resolved
