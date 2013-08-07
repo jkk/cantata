@@ -83,11 +83,19 @@
 (defn data-model? [x]
   (instance? DataModel x))
 
+(defn- merge-entity-specs [es1 es2]
+  (let [g1 (group-by :name es1)
+        g2 (group-by :name es2)
+        names (distinct (concat (keys g2) (keys g1)))]
+    (for [name names]
+      (merge (first (g1 name)) (first (g2 name))))))
+
 (defn reflect-data-model [ds & entity-specs]
   (apply
     data-model
-    (let [especs (or (not-empty entity-specs)
-                     (reflect/reflect-entities ds))]
+    (let [especs (merge-entity-specs
+                   (reflect/reflect-entities ds)
+                   entity-specs)]
       (for [espec especs]
         (let [db-name (or (:db-name espec)
                           (reflect/guess-db-name (:name espec)))]
