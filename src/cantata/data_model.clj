@@ -35,10 +35,18 @@
     maps))
 
 (defn make-entity [m]
+  (when-not (:name m)
+    (throw (ex-info (str "No :name provided for entity "
+                         (:name m))
+                    {:entity-spec m})))
   (r/map->Entity
     (let [fields (ordered-map-by-name (:fields m) make-field)
           pk (or (:pk m)
-                 (key (first fields)))
+                 (when-let [field1 (first fields)]
+                   (key field1))
+                 (throw (ex-info (str "No :pk provided for entity "
+                                      (:name m))
+                                 {:entity-spec m})))
           rels (ordered-map-by-name (:rels m) make-rel)
           shortcuts (ordered-map-by-name (:shortcuts m) make-shortcut)]
       (cond-> (assoc m
