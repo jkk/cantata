@@ -1,27 +1,23 @@
 (ns cantata.data-model
   (:refer-clojure :exclude [resolve])
-  (:require [cantata.data-source :as cds]
+  (:require [cantata.reflect :as reflect]
+            [cantata.records :as r]
+            [cantata.util :as cu]
             [flatland.ordered.map :as om]
-            [clojure.string :as string]))
-
-(defn guess-db-name [ename]
-  (string/replace (name ename) "-" "_"))
-
-(defrecord Field [name type db-name db-type])
+            [clojure.string :as string])
+  (:import [cantata.records Entity Field Rel DataModel]))
 
 (defn make-field [m]
-  (map->Field
+  (r/map->Field
     (if (:db-name m)
       m
-      (assoc m :db-name (guess-db-name (:name m))))))
-
-(defrecord Rel [name ename key local-key reverse])
+      (assoc m :db-name (reflect/guess-db-name (:name m))))))
 
 (defn guess-rel-key [rname]
   (keyword (str (name rname) "-id")))
 
 (defn make-rel [m]
-  (map->Rel
+  (r/map->Rel
     (let [name (:name m)
           ename (:ename m)]
       (cond-> m
@@ -29,12 +25,8 @@
               (not (:key m)) (assoc :key (guess-rel-key name))
               (nil? (:reverse m)) (assoc :reverse false)))))
 
-(defrecord Shortcut [name path])
-
 (defn make-shortcut [m]
-  (map->Shortcut m))
-
-(defrecord Entity [name pk fields rels db-name db-schema shortcuts])
+  (r/map->Shortcut m))
 
 (defn ^:private ordered-map-by-name [maps f]
   (reduce
@@ -43,23 +35,18 @@
     maps))
 
 (defn make-entity [m]
-  (map->Entity
+  (r/map->Entity
     (let [fields (ordered-map-by-name (:fields m) make-field)
           pk (or (:pk m)
                  (key (first fields)))
-          rels (ordered-map-by-name
-                 (map #(assoc % :local-key pk) (:rels m))
-                 make-rel)
+          rels (ordered-map-by-name (:rels m) make-rel)
           shortcuts (ordered-map-by-name (:shortcuts m) make-shortcut)]
       (cond-> (assoc m
                      :fields fields
                      :rels rels
                      :shortcuts shortcuts)
-              (not (:db-name m)) (assoc :db-name (guess-db-name (:name m)))
+              (not (:db-name m)) (assoc :db-name (reflect/guess-db-name (:name m)))
               (not (:pk m)) (assoc :pk pk)))))
-
-;; TODO: caching?
-(defrecord DataModel [entities])
 
 (defn ^:private reverse-rel-name [rel from]
   (keyword (str "_"
@@ -73,7 +60,7 @@
         rrel (make-rel {:name rrname
                         :ename from
                         :key (:key rel)
-                        :local-key (:local-key rel)
+                        :other-key (:other-key rel)
                         :reverse true})
         rrname2 from
         rrel2 (assoc rrel :name rrname2)]
@@ -91,99 +78,165 @@
                (for [ent (vals ents)
                      rel (vals (:rels ent))]
                  [ent rel]))]
-    (->DataModel ents)))
+    (r/->DataModel ents)))
 
-(defn reflect-data-model [data-source & entity-specs]
+(defn data-model? [x]
+  (instance? DataModel x))
+
+(defn reflect-data-model [ds & entity-specs]
   (apply
     data-model
     (let [especs (or (not-empty entity-specs)
-                     (cds/reflect-entities data-source))]
+                     (reflect/reflect-entities ds))]
       (for [espec especs]
-        (let [db-name (:db-name espec)]
+        (let [db-name (or (:db-name espec)
+                          (reflect/guess-db-name (:name espec)))]
           (assoc espec
                  :fields (or (:fields espec)
-                             (cds/reflect-fields data-source db-name))
+                             (reflect/reflect-fields ds db-name))
                  :rels (or (:rels espec)
-                           (cds/reflect-rels data-source db-name))
+                           (reflect/reflect-rels ds db-name))
                  :pk (or (:pk espec)
                          (:name (first (:fields espec)))
-                         (cds/reflect-pk data-source db-name))))))))
+                         (reflect/reflect-pk ds db-name))))))))
 
 ;;;;
 
-(defn ^:private reverse-rel-name? [^String s]
-  (= \_ (.charAt s 0)))
+(defn entities [dm]
+  (vals (:entities dm)))
 
-(defn split-path [path]
-  (loop [ret []
-         parts (seq (string/split (name path) #"\."))]
-    (if (nil? parts)
-      (map keyword ret)
-      (let [x (first parts)]
-        (if (reverse-rel-name? x)
-          (recur (conj ret (str x "." (second parts))) (nnext parts))
-          (recur (conj ret x) (next parts)))))))
+(defn entity [dm ename]
+  (get-in dm [:entities ename]))
 
-(defn join-path [& parts]
-  (keyword (string/join "." (map name parts))))
+(defn entity? [x]
+  (instance? Entity x))
 
-(defrecord Resolved [type value])
+(defn fields
+  ([ent]
+    (vals (:fields ent)))
+  ([dm ename]
+    (fields (entity dm ename))))
+
+(defn field-names
+  ([ent]
+    (keys (:fields ent)))
+  ([dm ename]
+    (field-names (entity dm ename))))
+
+(defn field
+  ([ent fname]
+    (get-in ent [:fields fname]))
+  ([dm ename fname]
+    (field (entity dm ename) fname)))
+
+(defn field? [x]
+  (instance? Field x))
+
+(defn rels
+  ([ent]
+    (vals (:rels ent)))
+  ([dm ename]
+    (rels (entity dm ename))))
+
+(defn rel
+  ([ent rname]
+    (get-in ent [:rels rname]))
+  ([dm ename rname]
+    (rel (entity dm ename) rname)))
+
+(defn rel? [x]
+  (instance? Rel x))
+
+(defn shortcuts
+  ([ent]
+    (vals (:shortcuts ent)))
+  ([dm ename]
+    (shortcuts (entity dm ename))))
+
+(defn shortcut
+  ([ent sname]
+    (get-in ent [:shortcuts sname]))
+  ([dm ename sname]
+    (shortcut (entity dm ename) sname)))
+
+(defn normalize-pk [pk]
+  (cu/seqify pk))
+
+;;;;
 
 (defn resolve
-  ([entity xname]
+  ([ent xname]
     (if (identical? xname :*)
-      (->Resolved :wildcard :*)
-      (if-let [field (get-in entity [:fields xname])]
-       (->Resolved :field field)
-       (if-let [rel (get-in entity [:rels xname])]
-         (->Resolved :rel rel)
-         (when-let [shortcut (get-in entity [:shortcuts xname])]
-           (->Resolved :shortcut shortcut))))))
+      (r/->Resolved :wildcard :*)
+      (if-let [f (field ent xname)]
+       (r/->Resolved :field f)
+       (if-let [r (rel ent xname)]
+         (r/->Resolved :rel r)
+         (when-let [sc (shortcut ent xname)]
+           (r/->Resolved :shortcut sc))))))
   ([dm ename xname]
-    (resolve (get-in dm [:entities ename]) xname)))
+    (resolve (entity dm ename) xname)))
 
-(defrecord ChainLink [path entity rel])
-
-(defrecord ResolvedPath [chain resolved shortcuts])
-
-(defn resolve-path [dm ename path]
+(defn resolve-path [dm ename-or-entity path]
   (loop [chain []
-         ename ename
-         rnames (split-path path)
+         ent (if (keyword? ename-or-entity)
+               (entity dm ename-or-entity)
+               ename-or-entity)
+         rnames (cu/split-path path)
          seen-path []
          shortcuts {}]
-    (let [entity (get-in dm [:entities ename])
-          rname (first rnames)
-          resolved (or (resolve entity rname)
+    (let [rname (first rnames)
+          resolved (or (resolve ent rname)
                        (throw (ex-info (str "Unknown reference " rname
-                                            " for entity " ename)
+                                            " for entity " (:name ent))
                                        {:data-model dm
                                         :rname rname
-                                        :ename ename})))]
+                                        :entity ent})))]
       (if (and (not (next rnames))
                (not= :shortcut (:type resolved)))
-        (->ResolvedPath chain resolved shortcuts)
+        (if (= :rel (:type resolved))
+          (let [rel (:value resolved)
+                ent* (entity dm (:ename rel))]
+            (r/->ResolvedPath
+              (conj chain (r/->ChainLink
+                            ent
+                            ent*
+                            (apply cu/join-path seen-path)
+                            (let [joined-seen-path (apply cu/join-path (conj seen-path rname))]
+                                (or (shortcuts joined-seen-path)
+                                    joined-seen-path))
+                            rel))
+              (r/->Resolved :entity ent*)
+              shortcuts))
+          (r/->ResolvedPath chain resolved shortcuts))
         (condp = (:type resolved)
           :shortcut (let [shortcut-path (-> resolved :value :path)]
                       (recur chain
-                             ename
-                             (concat (split-path shortcut-path)
+                             ent
+                             (concat (cu/split-path shortcut-path)
                                      (rest rnames))
                              seen-path
                              (assoc shortcuts
-                                    (apply join-path (conj seen-path shortcut-path))
-                                    (apply join-path (conj seen-path
-                                                           (-> resolved :value :name))))))
+                                    (apply cu/join-path (conj seen-path shortcut-path))
+                                    (apply cu/join-path (conj seen-path
+                                                              (-> resolved :value :name))))))
           :rel (if (= :rel (:type resolved))
                  (let [rel (:value resolved)
                        ename* (:ename rel)
+                       ent* (entity dm ename*)
                        seen-path* (conj seen-path rname)
-                       link (->ChainLink
-                              (apply join-path seen-path*)
-                              (get-in dm [:entities ename*])
+                       [seen-path* joined-seen-path] (let [joined-seen-path (apply cu/join-path seen-path*)]
+                                                       (if-let [sc (shortcuts joined-seen-path)]
+                                                         [(cu/split-path sc) sc]
+                                                         [seen-path* joined-seen-path]))
+                       link (r/->ChainLink
+                              ent
+                              ent*
+                              (apply cu/join-path seen-path)
+                              joined-seen-path
                               rel)]
                    (recur (conj chain link)
-                          ename*
+                          ent*
                           (rest rnames)
                           seen-path*
                           shortcuts)))
@@ -192,50 +245,3 @@
                            :rname rname
                            :resolved resolved
                            :path path})))))))
-
-
-
-(comment
-  
-  (def dm
-    (data-model {:name :person
-                 :fields [{:name :id}
-                          {:name :full-name}
-                          {:name :home-id}
-                          {:name :office-id}]
-                 :rels [{:name :home :ename :location}
-                        {:name :office :ename :location}]}
-                {:name :location
-                 :fields [{:name :id}
-                          {:name :name}
-                          {:name :address}]
-                 :shortcuts [{:name :worker :path :_office.person}
-                             {:name :resident :path :_home.person}]}
-                {:name :car
-                 :fields [{:name :id}
-                          {:name :make}
-                          {:name :model}
-                          {:name :year}]}
-                {:name :car-ownership
-                 :fields [{:name :id}
-                          {:name :owner-id}
-                          {:name :car-id}]
-                 :rels [{:name :owner :ename :person :key :owner-id}
-                        {:name :car}]}))
-  
-  (def dm
-    (data-model 
-      :person {:fields [:id :full-name :home-id :office-id]
-               :belongs-to [:home {:ename :location}
-                            :office {:ename :location}]
-               :has-many [:car {:via :car-ownership :key :owner-id}]}
-      :location {:fields [:id :name :address]
-                 :has-many [:resident {:ename :person :key :home-id}
-                            :worker {:ename :person :key :office-id}]}
-      :car {:fields [:id :make :model :year]
-            :has-many [:owner {:ename :person :via :car-ownership}]}
-      :car-ownership {:fields [:id :owner-id :car-id]
-                      :belongs-to [:owner {:ename :person}
-                                   :car {}]}))
-  
-  )
