@@ -7,33 +7,121 @@
             [clojure.string :as string])
   (:import com.mchange.v2.c3p0.ComboPooledDataSource))
 
-(defmulti qualify (fn [x]
+(defn identifier
+  ([x quoting]
+    (hq/raw (hq/quote-identifier x :style quoting :split false)))
+  ([x y quoting]
+    (if-not x
+      (identifier y quoting)
+      (hq/raw (str (hq/quote-identifier x :style quoting :split false)
+                   "."
+                   (hq/quote-identifier y :style quoting :split false))))))
+
+(defmulti qualify (fn [x quoting]
                     (-> x :resolved :type)))
 
-(defmethod qualify :default [x]
+(defmethod qualify :default [x quoting]
   x)
 
-(defmethod qualify :field [x]
-  ;; TODO: chain qualifiers
-  (keyword (-> x :resolved :value :db-name)))
+(defmethod qualify :entity [x quoting]
+  (let [ent (-> x :resolved :value)]
+    (identifier (:db-schema ent) (:db-name ent) quoting)))
 
-(defn finalize-q [dm qargs]
-  (let [{:keys [q fields resolved-fields]} (cq/prep-query dm qargs)
-        ent (cdm/entity dm (:from q))
-        _ (when-not ent 
-            (throw (ex-info (str "No such entity - " (:from q))
-                            {:q q :data-model dm})))
-        ;; FIXME: identifier honeysql type
-        from [[(keyword (:db-name ent)) (:name ent)]]
-        select (for [field (:select q)]
-                 ;; TODO: respect explicit aliases
-                 (if-let [rp (resolved-fields field)]
-                   [(qualify rp) field]
-                   field))]
-    ;; TODO db names, aliasing
-    (assoc q
-           :from from
-           :select select)))
+(defmethod qualify :field [x quoting]
+  (let [fname (-> x :resolved :value :db-name)
+        chain (:chain x)]
+    (if (seq chain)
+      (identifier (-> chain peek :to-path) fname quoting)
+      (identifier (-> x :root :name) fname quoting))))
+
+(def ^:dynamic *subquery-depth* -1)
+
+(defmulti qualify-clause
+  (fn [clause clause-val data-model quoting resolved-paths]
+    clause))
+
+(defmethod qualify-clause :default [_ cval _ _ _]
+  cval)
+
+(defmethod qualify-clause :from [_ from dm quoting _]
+  (if-let [ent (cdm/entity dm from)]
+    [[(identifier (:db-name ent) quoting) from]]
+    (throw (ex-info (str "Unrecognized entity name in :from - " from)
+                    {:from from}))))
+
+;; TODO: aggs, subqueries
+(defmethod qualify-clause :select [_ select _ quoting rps]
+  (for [field select]
+    ;; TODO: respect explicit aliases
+    (if-let [rp (rps field)]
+      [(qualify rp quoting) (identifier field quoting)]
+      field)))
+
+;; TODO: agg, subqueries
+(defn qualify-pred-fields [pred quoting rps]
+  (when pred
+    (let [fields (cq/get-predicate-fields pred)
+          smap (into {} (for [f fields]
+                          [f (qualify (rps f) quoting)]) )]
+      (cq/replace-predicate-fields pred smap))))
+
+(defmethod qualify-clause :where [_ where _ quoting rps]
+ (qualify-pred-fields where quoting rps))
+
+(defmethod qualify-clause :having [_ where _ quoting rps]
+ (qualify-pred-fields where quoting rps))
+
+;; TODO: agg
+(defmethod qualify-clause :order-by [_ order-by _ quoting rps]
+ (when order-by
+   (for [f order-by]
+     (let [fname (if (coll? f) (first f) f)
+           dir (when (coll? f) (second f))
+           qfield (qualify (rps fname) quoting)]
+       (if dir
+         [qfield dir]
+         qfield)))))
+
+(defmethod qualify-clause :group-by [_ group-by _ quoting rps]
+ (when group-by
+   (for [fname group-by]
+     (qualify (rps fname) quoting))))
+
+;; TODO: subqueries
+(defn- qualify-join [joins quoting rps]
+ (mapcat (fn [[to on]]
+           (let [ename (if (vector? to) (first to) to)
+                 path (if (vector? to)
+                        (second to)
+                        ename)
+                 qpath (identifier path quoting)
+                 qename (qualify (rps path) quoting)
+                 on* (qualify-pred-fields on quoting rps)]
+             [[qename qpath] on*]))
+         (partition 2 joins)))
+
+(defmethod qualify-clause :join [_ joins _ quoting rps]
+ (qualify-join joins quoting rps))
+
+(defmethod qualify-clause :left-join [_ joins _ quoting rps]
+ (qualify-join joins quoting rps))
+
+(defmethod qualify-clause :right-join [_ joins _ quoting rps]
+ (qualify-join joins quoting rps))
+
+;; TODO: traverse into SqlCalls?
+(defn prep-q [dm qargs quoting]
+  (let [{:keys [q resolved-paths]} (cq/prep-query dm qargs)]
+    (binding [*subquery-depth* (inc *subquery-depth*)]
+      (reduce-kv
+        (fn [q clause cval]
+          (let [cval* (qualify-clause clause cval dm quoting resolved-paths)]
+            (if (and (not (nil? cval))
+                     (or (not (coll? cval*))
+                         (seq cval*)))
+              (assoc q clause cval*)
+              q)))
+        q q))))
 
 (def subprotocol->quoting
   {"postgresql" :ansi
@@ -61,9 +149,10 @@
    (string? q) [q]
    (and (vector? q) (string? (first q))) q
    (and (sequential? q) (string? (first q))) (vec q)
-   :else (hq/format
-           (finalize-q dm q) :quoting (or (:cantata.core/quoting ds)
-                                          (detect-quoting ds)))))
+   :else (let [quoting (or (:cantata.core/quoting ds)
+                           (detect-quoting ds))]
+           (hq/format
+             (prep-q dm q quoting) :quoting quoting))))
 
 (defn dasherize [s]
   (string/replace s "_" "-"))

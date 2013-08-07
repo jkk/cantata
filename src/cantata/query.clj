@@ -1,7 +1,9 @@
 (ns cantata.query
   (:require [cantata.util :as cu]
             [cantata.data-model :as dm]
-            [clojure.string :as string]))
+            [cantata.records :as r]
+            [clojure.string :as string]
+            [flatland.ordered.map :as om]))
 
 (defn- merge-where
   ([q where]
@@ -219,8 +221,15 @@
   (and (keyword? field)
        (.endsWith ^String (name field) ".*")))
 
-(defn resolve-path [qenv path]
-  (get qenv path))
+(defn resolve-path [dm entity qenv path]
+  (or
+    ;;TODO create Resolved record
+    (when (map? path) {})
+    (when-let [resolved (get qenv path)]
+      (r/->ResolvedPath entity [] resolved nil))
+    (when (get-aggregate-op path) {}) ;;TODO: pass along agg info
+    (when dm
+      (dm/resolve-path dm entity path))))
 
 (defn expand-wildcard
   "Expands a wildcard field into a sequence of all fields for the given
@@ -229,10 +238,8 @@
   (let [path (-> (name field)
                (string/replace #"\.\*$" "")
                keyword)
-        rent (if qenv
-               (:entity (resolve-path qenv path))
-               (-> (dm/resolve-path dm entity path)
-                 :resolved :value))]
+        rent (-> (resolve-path dm entity qenv path)
+               :resolved :value)]
     (if-not rent
       (throw (ex-info (str "Unrecognized wildcard: " field)
                       {:field field :entity entity}))
@@ -377,9 +384,11 @@
                      alias (if (vector? to)
                              (second to)
                              ename)]
-                 [alias {:entity (dm/entity dm ename)
-                         :on on
-                         :subquery subq}])))))
+                 [alias (assoc (r/->Resolved
+                                :joined-entity
+                                (dm/entity dm ename))
+                               :on on
+                               :subquery subq)])))))
 
 (declare prep-query)
 
@@ -431,16 +440,17 @@
     (throw (ex-info (str "Invalid aggregate op: " op) {:op op})))
   (cu/join-path (str "%" (name op)) field))
 
-(defn resolve-fields [dm ent fields & [env]]
-  (doall
-    (for [field fields]
-      (or
-        (when (map? field) {})
-        (when-let [qual (first (cu/unqualify field))]
-          (resolve-path env qual))
-        (when (get-aggregate-op field) {}) ;;TODO: pass along agg info
-        (when dm
-          (dm/resolve-path dm ent field))))))
+(defn resolve-paths [dm ent paths & [env]]
+  (reduce
+    (fn [rps path]
+      (let [rps (assoc rps path (resolve-path dm ent env path))
+            qual (when (keyword? path)
+                   (first (cu/unqualify path)))]
+        (if qual
+          (assoc rps qual (resolve-path dm ent env qual))
+          rps)))
+    (om/ordered-map)
+    paths))
 
 (defn prep-query
   "Prepares a query for execution by expanding wildcard fields, implicit joins,
@@ -468,20 +478,18 @@
         q (assoc q :select (vec (expand-wildcards dm ent (:select q) qenv)))
         q (if (:without q) (expand-without q) q)
         fields (get-all-fields q)
-        rfs (cu/zip-ordered-map
-              fields
-              (resolve-fields dm ent fields qenv))
-        [q qenv fields rfs] (if (false? expand-joins)
-                              [q qenv fields rfs]
-                              (let [q (expand-implicit-joins q (vals rfs) qenv)
+        rps (resolve-paths dm ent fields qenv)
+        [q qenv fields rps] (if (false? expand-joins)
+                              [q qenv fields rps]
+                              (let [q (expand-implicit-joins q (vals rps) qenv)
                                     qenv (merge env (get-query-env dm q))
                                     fields (get-all-fields q)
-                                    rfs (cu/zip-ordered-map
-                                          fields
-                                          (resolve-fields dm ent fields qenv))]
-                                [q qenv fields rfs]))
+                                    rps (resolve-paths dm ent fields nil)]
+                                [q qenv fields rps]))
         subqs (filter map? fields)
-        subq-env (assoc qenv (:name ent) {:entity ent})
+        subq-env (assoc qenv (:name ent) (r/->Resolved
+                                           :parent-entity
+                                           ent))
         q (expand-subqueries dm q subqs subq-env)]
     {:q q
-     :resolved-fields rfs}))
+     :resolved-paths rps}))

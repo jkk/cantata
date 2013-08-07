@@ -7,5 +7,5 @@
 (defrecord DataModel [entities])
 (defrecord Resolved [type value])
 (defrecord ChainLink [from to from-path to-path rel])
-(defrecord ResolvedPath [chain resolved shortcuts])
+(defrecord ResolvedPath [root chain resolved shortcuts])
 
