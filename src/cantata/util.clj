@@ -42,6 +42,15 @@
       [(keyword (subs s 0 doti))
        (keyword (subs s (inc doti)))])))
 
+(defn qualifiers [path]
+  (loop [s ^String (name path)
+         quals []]
+    (let [doti (.lastIndexOf s ".")]
+      (if (neg? doti)
+        quals
+        (let [s* (subs s 0 doti)]
+          (recur s* (conj quals (keyword s*))))))))
+
 (defn unqualified? [path]
   (let [s ^String (name path)]
     (neg? (.indexOf s (int \.) 0))))

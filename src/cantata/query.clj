@@ -241,24 +241,28 @@
             [(keyword (subs s 1 doti))
              (keyword (subs s (inc doti)))]))))))
 
+(defn agg? [x]
+  (and (keyword? x)
+       (re-find aggregate-re (name x))))
+
 (defn agg [op path]
   (when-not (aggregate-ops op)
     (throw (ex-info (str "Invalid aggregate op: " op) {:op op})))
   (cu/join-path (str "%" (name op)) path))
 
-(defn resolve-path [dm entity qenv path]
+(defn resolve-path [dm entity qenv path & opts]
   (or
     ;;TODO create Resolved record
     (when (map? path) {})
     (when-let [resolved (get qenv path)]
       (r/->ResolvedPath entity [] resolved nil))
     (when-let [[agg-op agg-path] (parse-agg path)]
-      (when-let [rp (resolve-path dm entity qenv agg-path)]
+      (when-let [rp (apply resolve-path dm entity qenv agg-path opts)]
         (let [resolved (r/->Resolved
                          :agg-op (r/->AggOp agg-op agg-path (:resolved rp)))]
           (r/->ResolvedPath entity (:chain rp) resolved (:shortcuts rp)))))
     (when dm
-      (dm/resolve-path dm entity path))))
+      (apply dm/resolve-path dm entity path opts))))
 
 (defn expand-wildcard
   "Expands a wildcard field into a sequence of all fields for the given
@@ -463,27 +467,27 @@
 (defn resolve-paths [dm ent qenv paths]
   (let [no-fields? (empty? (:fields ent))]
     (reduce
-     (fn [rps path]
-       (let [rp (or (resolve-path dm ent qenv path)
-                    ;; When no entity fields defined, assume all unqualified
-                    ;; keywords are entity fields
-                    (when (and no-fields? (keyword? path) (cu/unqualified? path))
-                      (let [resolved (r/->Resolved :field (dm/make-field {:name path}))]
-                        (r/->ResolvedPath ent [] resolved {}))))
-             rps (if rp
-                   (assoc rps path rp)
-                   rps)
-             [qual basename] (when (keyword? path)
-                               (cu/unqualify path))]
-         (if qual
-           (assoc rps qual (resolve-path dm ent qenv qual))
-           rps)))
-     (om/ordered-map)
-     paths)))
+      (fn [rps path]
+        (let [quals (when (and (keyword? path) (not (agg? path)))
+                      (cu/qualifiers path))
+              ;; All qualifiers MUST resolve
+              rps (into rps
+                        (for [qual quals]
+                          [qual
+                           (or (resolve-path dm ent qenv qual)
+                               (throw (ex-info (str "Unrecognized path " path
+                                                    " for entity " (:name ent))
+                                               {:path qual :entity ent})))]))
+              ;; When no entity fields defined, pretend all unresolved
+              ;; keywords are entity fields
+              rp (resolve-path dm ent qenv path :lax true)]
+          (assoc rps path rp)))
+      (om/ordered-map)
+      paths)))
 
 (defn prep-query
   "Prepares a query for execution by expanding wildcard fields, implicit joins,
-  and subqueries. Returns the transformed query and gathered information."
+  and subqueries. Returns the transformed query and a map of resolved paths."
   [dm qargs & {:keys [expand-joins env] :or {expand-joins true}}]
   (let [q (apply build-query (if (map? qargs) [qargs] qargs))
         q (if (:select q) q (assoc q :select [:*]))]
