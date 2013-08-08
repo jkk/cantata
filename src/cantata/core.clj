@@ -1,6 +1,7 @@
 (ns cantata.core
   (:require [cantata.util :as cu]
             [cantata.data-model :as cdm]
+            [cantata.query :as cq]
             [cantata.sql :as sql]
             [clojure.java.jdbc :as jd]))
 
@@ -44,6 +45,9 @@
   (apply data-source
          (sql/create-pool (normalize-db-spec db-spec))
          model+opts))
+
+(defn build-query [& qargs]
+  (apply cq/build-query qargs))
 
 (defn with-query-rows*
   ([ds qargs body-fn]
