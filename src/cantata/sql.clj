@@ -190,7 +190,6 @@
    (string? q) [q]
    (and (vector? q) (string? (first q))) q
    (and (sequential? q) (string? (first q))) (vec q)
-   (and (vector? (first q)) (string? (ffirst q))) (first q)
    :else (let [{:keys [q env]} (cq/prep-query dm q)]
            (hq/format
              (qualify-query dm quoting q env)
