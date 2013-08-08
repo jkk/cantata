@@ -187,7 +187,7 @@
 
 ;;TODO: prepared queries/statements
 (defn query [ds dm q callback]
-  (let [sql-params (to-sql dm q (detect-quoting ds))
+  (let [sql-params (to-sql dm q :quoting (detect-quoting ds))
         _ (when cu/*verbose* (prn sql-params))
         [cols & rows] (jd/query ds sql-params
                                 :identifiers dasherize
