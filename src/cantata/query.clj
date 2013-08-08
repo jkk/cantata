@@ -329,8 +329,8 @@
                                   (dm/guess-rel-key (:name from))
                                   (:pk to)))]
     [:=
-     (cu/join-path from-alias (or key (:pk from)))
-     (cu/join-path to-alias (or other-key (:pk to)))]))
+     (cu/join-path from-alias key)
+     (cu/join-path to-alias other-key)]))
 
 (defn- build-joins [chain shortcuts & [where]]
   (when (seq chain)

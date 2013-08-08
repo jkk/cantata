@@ -11,11 +11,11 @@
   `(binding [cu/*verbose* true]
      ~@body))
 
-(defn data-model [& entity-specs]
-  (apply cdm/data-model entity-specs))
+(defn data-model [entity-specs]
+  (cdm/data-model entity-specs))
 
-(defn reflect-data-model [ds & entity-specs]
-  (apply cdm/reflect-data-model (force ds) entity-specs))
+(defn reflect-data-model [ds entity-specs]
+  (cdm/reflect-data-model (force ds) entity-specs))
 
 (defn- normalize-db-spec [db-spec]
   (cond
@@ -24,14 +24,6 @@
     (instance? java.net.URI db-spec) (normalize-db-spec (str db-spec))
     :else (throw (ex-info "Unrecognized db-spec format" {:db-spec db-spec}))))
 
-(defn- normalize-data-model [dm]
-  (if (cdm/data-model? dm)
-    (cdm/entities dm)
-    (if (map? dm)
-      (for [[k v] dm]
-        (assoc v :name k))
-      dm)))
-
 (defn data-source [db-spec & model+opts]
   (let [arg1 (first model+opts)
         [dm opts] (if (keyword? arg1)
@@ -39,11 +31,11 @@
                     [arg1 (rest model+opts)])
         opts (apply hash-map opts)
         dm (if (:reflect opts)
-             (apply reflect-data-model db-spec (normalize-data-model dm))
+             (reflect-data-model db-spec dm)
              (when dm
                (if (cdm/data-model? dm)
                  dm
-                 (apply data-model (normalize-data-model dm)))))]
+                 (data-model dm))))]
     (cond-> (normalize-db-spec db-spec)
             dm (assoc ::data-model dm)
             (contains? opts :quoting) (assoc ::quoting (:quoting opts)))))

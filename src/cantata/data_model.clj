@@ -88,40 +88,60 @@
 (defn ^:private add-reverse-rels [ents ent rel]
   (let [ename (:ename rel)
         from (:name ent)
-        rrname (reverse-rel-name rel from)
+        rrname (reverse-rel-name rel from) ;with qualifier - unique
         rrel (make-rel {:name rrname
                         :ename from
                         :key (:other-key rel)
                         :other-key (:key rel)
                         :reverse true})
-        rrname2 from
+        rrname2 from ;without qualifier - not necessarily unique
         rrel2 (assoc rrel :name rrname2)]
-    (-> ents
-      (assoc-in [ename :rels rrname] rrel)
-      (update-in [ename :rels rrname2] #(when-not %1 %2) rrel2))))
+    (if (ents ename)
+      (-> ents
+        (assoc-in [ename :rels rrname] rrel)
+        ;; clear out the unqualified rel if necessary, to avoid ambiguity
+        (update-in [ename :rels rrname2] #(when-not %1 %2) rrel2))
+      ents)))
 
-(defn data-model [& entity-specs]
-  ;; TODO: enforce naming uniqueness, check for bad rels
-  (when-let [bad-spec (first (remove map? entity-specs))]
-    (throw (ex-info (str "Invalid entity spec: " bad-spec)
-                    {:entity-spec bad-spec})))
-  (let [;; Wait to init rels, so we can guess PK/FKs more reliably
-        ents (ordered-map-by-name (map #(dissoc % :rels) entity-specs)
-                                  make-entity)
-        ents (reduce
-               (fn [ents [ent rspec]]
-                 (if rspec
-                   (let [rel (make-rel rspec ents)]
-                     (-> ents
-                       (assoc-in [(:name ent) :rels (:name rel)] rel)
-                       (add-reverse-rels ent rel)))
-                   ents))
-               ents
-               (for [[ent rspecs] (map list (vals ents)
-                                       (map :rels entity-specs))
-                     rspec rspecs]
-                 [ent rspec]))]
-    (r/->DataModel ents)))
+(declare validate-data-model data-model? entities fields rels shortcuts)
+
+(defn normalize-entity-specs [specs]
+  (if (data-model? specs)
+    (for [ent (entities specs)]
+      (let [m (into {} ent)]
+        (cond-> m 
+          (:fields m) (assoc :fields (fields ent))
+          (:rels m) (assoc :rels (remove :reverse (rels ent)))
+          (:shortcuts m) (assoc :shortcuts (shortcuts ent)))))
+    (if (map? specs)
+      (for [[k v] specs]
+        (assoc v :name k))
+      specs)))
+
+(defn data-model [entity-specs]
+  ;; TODO: enforce naming uniqueness
+  (let [entity-specs (normalize-entity-specs entity-specs)]
+    (when-let [bad-spec (first (remove map? entity-specs))]
+      (throw (ex-info (str "Invalid entity spec: " bad-spec)
+                      {:entity-spec bad-spec})))
+    (let [;; Wait to init rels, so we can guess PK/FKs more reliably
+          ents (ordered-map-by-name (map #(dissoc % :rels) entity-specs)
+                                    make-entity)
+          ents (reduce
+                 (fn [ents [ent rspec]]
+                   (if rspec
+                     (let [rel (make-rel rspec ents)]
+                       (-> ents
+                         (assoc-in [(:name ent) :rels (:name rel)] rel)
+                         (add-reverse-rels ent rel)))
+                     ents))
+                 ents
+                 (for [[ent rspecs] (map list (vals ents)
+                                         (map :rels entity-specs))
+                       rspec rspecs]
+                   [ent rspec]))]
+      (validate-data-model
+        (r/->DataModel ents)))))
 
 (defn data-model? [x]
   (instance? DataModel x))
@@ -133,12 +153,11 @@
     (for [name names]
       (merge (first (g1 name)) (first (g2 name))))))
 
-(defn reflect-data-model [ds & entity-specs]
-  (apply
-    data-model
+(defn reflect-data-model [ds entity-specs]
+  (data-model
     (let [especs (merge-entity-specs
                    (reflect/reflect-entities ds)
-                   entity-specs)]
+                   (normalize-entity-specs entity-specs))]
       (for [espec especs]
         (let [db-name (or (:db-name espec)
                           (reflect/guess-db-name (:name espec)))]
@@ -256,9 +275,9 @@
                              rel))
                (r/->Resolved :entity ent*)
                shortcuts))
-           (let [resolved (or resolved
-                              (when lax ;pretend it's a field
-                                (r/->Resolved :field (make-field {:name rname}))))]
+           (when-let [resolved (or resolved
+                                   (when lax ;pretend it's a field
+                                     (r/->Resolved :field (make-field {:name rname}))))]
              (r/->ResolvedPath root chain resolved shortcuts)))
          (condp = (:type resolved)
            :shortcut (let [shortcut-path (-> resolved :value :path)]
@@ -293,5 +312,29 @@
            :entity (recur chain ent (rest rnames) seen-path shortcuts) 
            nil))))))
 
+(defn validate-data-model
+  "Ensures all relationship references in the given data model are valid.
+  Throws an exception if anything is invalid, otherwise returns the data model."
+  [dm]
+  (doseq [ent (entities dm)]
+    (doseq [rel (rels ent)]
+      (when rel
+        (let [rent (entity dm (:ename rel))]
+          (when-not rent
+            (throw (ex-info (str "Invalid entity name " (:ename rel) " in rel "
+                                 (:name rel) " in entity " (:name ent))
+                            {:rel rel :entity ent})))
+          (when-let [key (:key rel)]
+            (or (resolve ent key)
+                (empty? (fields ent))
+                (throw (ex-info (str "Invalid rel :key " key " in rel "
+                                     (:name rel) " in entity " (:name ent))
+                                {:rel rel :entity ent}))))
+          (when-let [other-key (:other-key rel)]
+            (or (resolve rent other-key)
+                (empty? (fields rent))
+                (throw (ex-info (str "Invalid rel :other-key " key " in rel "
+                                     (:name rel) " in entity " (:name ent))
+                                {:rel rel :entity ent}))))))))
+  dm)
 
-;; TODO: check rel validity
