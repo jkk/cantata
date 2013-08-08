@@ -8,6 +8,9 @@
   (:import [cantata.records Entity Field Rel DataModel]))
 
 (defn make-field [m]
+  (when-not (:name m)
+    (throw (ex-info "No :name provided for field"
+                    {:rel-spec m})))
   (r/map->Field
     (if (:db-name m)
       m
@@ -18,6 +21,9 @@
     (keyword (str (name basename) "-id"))))
 
 (defn make-rel [m & [other-ents]]
+  (when-not (:name m)
+    (throw (ex-info "No :name provided for rel"
+                    {:rel-spec m})))
   (r/map->Rel
     (let [name (:name m)
           ename (:ename m)]
@@ -41,8 +47,7 @@
 
 (defn make-entity [m]
   (when-not (:name m)
-    (throw (ex-info (str "No :name provided for entity "
-                         (:name m))
+    (throw (ex-info "No :name provided for entity"
                     {:entity-spec m})))
   (r/map->Entity
     (let [fields (ordered-map-by-name (:fields m) make-field)
