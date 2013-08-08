@@ -29,13 +29,16 @@
         [dm opts] (if (keyword? arg1)
                     [nil model+opts]
                     [arg1 (rest model+opts)])
-        {:keys [reflect quoting]} (apply hash-map opts)
-        dm (if reflect
+        opts (apply hash-map opts)
+        dm (if (:reflect opts)
              (apply reflect-data-model db-spec (if (map? dm) (vals dm) dm))
-             dm)]
+             (when dm
+               (if (cdm/data-model? dm)
+                 dm
+                 (apply data-model dm))))]
     (cond-> (normalize-db-spec db-spec)
             dm (assoc ::data-model dm)
-            quoting (assoc ::quoting quoting))))
+            (contains? opts :quoting) (assoc ::quoting (:quoting opts)))))
 
 (defn pooled-data-source [db-spec & model+opts]
   (apply data-source

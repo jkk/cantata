@@ -148,15 +148,16 @@
    "jtds:sqlserver" :sqlserver})
 
 (defn detect-quoting [ds]
-  (or (:cantata.core/quoting ds)
-      (if-let [subprot (:subprotocol ds)]
-        (subprotocol->quoting subprot)
-        (let [ds* (:datasource ds)]
-          (when (and ds* (instance? ComboPooledDataSource ds*))
-            (let [url (.getJdbcUrl ^ComboPooledDataSource ds*)]
-              (when-let [subprot (second (re-find #"^([^:]+):"
-                                                  (string/replace url #"^jdbc:" "")))]
-                (subprotocol->quoting subprot))))))))
+  (if (contains? ds :cantata.core/quoting)
+    (:cantata.core/quoting ds)
+    (if-let [subprot (:subprotocol ds)]
+      (subprotocol->quoting subprot)
+      (let [ds* (:datasource ds)]
+        (when (and ds* (instance? ComboPooledDataSource ds*))
+          (let [url (.getJdbcUrl ^ComboPooledDataSource ds*)]
+            (when-let [subprot (second (re-find #"^([^:]+):"
+                                                (string/replace url #"^jdbc:" "")))]
+              (subprotocol->quoting subprot))))))))
 
 (defn plain-sql? [q]
   (or (string? q)
