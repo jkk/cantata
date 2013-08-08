@@ -15,7 +15,7 @@
   (apply cdm/data-model entity-specs))
 
 (defn reflect-data-model [ds & entity-specs]
-  (apply cdm/reflect-data-model ds entity-specs))
+  (apply cdm/reflect-data-model (force ds) entity-specs))
 
 (defn- normalize-db-spec [db-spec]
   (cond
@@ -55,9 +55,9 @@
 
 (defn with-query-rows*
   ([ds qargs body-fn]
-    (with-query-rows* ds (::data-model ds) qargs body-fn))
+    (with-query-rows* ds (::data-model (force ds)) qargs body-fn))
   ([ds dm qargs body-fn]
-    (sql/query ds dm qargs body-fn)))
+    (sql/query (force ds) dm qargs body-fn)))
 
 ;; supporting optional dm arg makes this really awkward
 #_(defmacro with-query-rows
@@ -73,7 +73,7 @@
 (defn ^:private get-dm+args [ds args]
   (if (cdm/data-model? (first args))
     [(first args) (rest args)]
-    [(::data-model ds) args]))
+    [(::data-model (force ds)) args]))
 
 (defn query*
   [ds & qargs]
@@ -110,18 +110,18 @@
 
 (defn query-count [ds & qargs]
   (let [[dm qargs] (get-dm+args ds qargs)]
-    (sql/query-count ds dm qargs)))
+    (sql/query-count (force ds) dm qargs)))
 
 (defn query-count* [ds & qargs]
   (let [[dm qargs] (get-dm+args ds qargs)]
-    (sql/query-count ds dm qargs :flat true)))
+    (sql/query-count (force ds) dm qargs :flat true)))
 
 (defn save! [ds dm ename changes opts])
 
 (defn delete! [ds dm ename pred opts])
 
-(defmacro transaction [binding & body]
-  `(jd/db-transaction ~binding ~@body))
+(defmacro transaction [[ds-sym ds] & body]
+  `(jd/db-transaction [~ds-sym (force ~ds)] ~@body))
 
 (defmacro rollback! [ds]
   `(jd/db-set-rollback-only! ~ds))
@@ -134,7 +134,7 @@
 
 (defn to-sql [ds & qargs]
   (let [[dm qargs] (get-dm+args ds qargs)]
-    (sql/to-sql ds dm qargs)))
+    (sql/to-sql (force ds) dm qargs)))
 
 ;;;;
 
