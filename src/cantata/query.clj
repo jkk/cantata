@@ -475,13 +475,17 @@
                         (for [qual quals]
                           [qual
                            (or (resolve-path dm ent qenv qual)
-                               (throw (ex-info (str "Unrecognized path " path
+                               (throw (ex-info (str "Unrecognized path " qual
                                                     " for entity " (:name ent))
                                                {:path qual :entity ent})))]))
               ;; When no entity fields defined, pretend all unresolved
               ;; keywords are entity fields
-              rp (resolve-path dm ent qenv path :lax true)]
-          (assoc rps path rp)))
+              rp (resolve-path dm ent qenv path :lax no-fields?)]
+          (if rp
+            (assoc rps path rp)
+            (throw (ex-info (str "Unrecognized path " path
+                                 " for entity " (:name ent))
+                            {:path path :entity ent})))))
       (om/ordered-map)
       paths)))
 
