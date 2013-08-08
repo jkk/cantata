@@ -181,7 +181,7 @@
              :quoting quoting))))
 
 (defn dasherize [s]
-  (string/replace s "[^^]_" "-"))
+  (string/replace s #"(?!^)_" "-"))
 
 (defn undasherize [s]
   (string/replace s "-" "_"))
