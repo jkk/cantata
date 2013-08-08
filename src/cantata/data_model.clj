@@ -23,8 +23,7 @@
         (assoc m :db-name (reflect/guess-db-name (:name m)))))))
 
 (defn guess-rel-key [rname]
-  (let [[_ basename] (cu/unqualify rname)]
-    (keyword (str (name basename) "-id"))))
+  (keyword (str (name (cu/last-part rname)) "-id")))
 
 (defn make-rel [m & [other-ents]]
   (let [m (normalize-spec m)]

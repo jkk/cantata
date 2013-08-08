@@ -16,7 +16,7 @@
       (mapv keyword path)
       path)
     (loop [ret []
-          parts (seq (string/split (name path) #"\."))]
+           parts (seq (string/split (name path) #"\."))]
      (if (nil? parts)
        ret
        (let [x (first parts)]
@@ -34,22 +34,36 @@
             (keyword (name part1))))
         (keyword (string/join "." (map name parts)))))))
 
+(defn last-part [path]
+  (let [s ^String (name path)]
+    (when (< 0 (.length s))
+      (let [doti (.lastIndexOf s ".")]
+        (if (neg? doti)
+          path
+          (keyword (subs s (inc doti))))))))
+
 (defn unqualify [path]
-  (let [s ^String (name path)
-        doti (.lastIndexOf s ".")]
-    (if (neg? doti)
-      [nil path]
-      [(keyword (subs s 0 doti))
-       (keyword (subs s (inc doti)))])))
+  (let [s ^String (name path)]
+    (when (< 0 (.length s))
+      (let [doti (.lastIndexOf s ".")]
+        (if (neg? doti)
+          [nil path]
+          (let [sq ^String (subs s 0 doti)
+                doti2 (.lastIndexOf sq ".")]
+            (if (and (not (neg? doti2)) (= \_ (.charAt s (inc doti2))))
+              [(keyword (subs s 0 doti2))
+               (keyword (subs s (inc doti2)))]
+              (if (and (neg? doti2) (= \_ (.charAt s 0)))
+                [nil (keyword s)]
+                [(keyword sq)
+                 (keyword (subs s (inc doti)))]))))))))
 
 (defn qualifiers [path]
-  (loop [s ^String (name path)
-         quals []]
-    (let [doti (.lastIndexOf s ".")]
-      (if (neg? doti)
-        quals
-        (let [s* (subs s 0 doti)]
-          (recur s* (conj quals (keyword s*))))))))
+  (loop [quals []
+         [qual] (unqualify path)]
+    (if-not qual
+      quals
+      (recur (conj quals qual) (unqualify qual)))))
 
 (defn unqualified? [path]
   (let [s ^String (name path)]
