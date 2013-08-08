@@ -201,7 +201,7 @@
         (r/->Resolved :rel r)
         (if-let [sc (shortcut ent xname)]
           (r/->Resolved :shortcut sc)
-          (when (= (:name ent xname))
+          (when (= (:name ent) xname)
             (r/->Resolved :entity ent))))))
   ([dm ename xname]
     (resolve (entity dm ename) xname)))
