@@ -124,9 +124,14 @@
 (defmacro rollback? [ds]
   `(jd/db-is-rollback-only ~ds))
 
-(defn to-sql [ds & qargs]
-  (let [[dm qargs] (get-dm+args ds qargs)]
-    (sql/to-sql (force ds) dm qargs)))
+(defn to-sql [ds-or-dm & qargs]
+  (let [[ds dm] (if (cdm/data-model? ds-or-dm)
+                  [nil ds-or-dm]
+                  [ds-or-dm nil])
+        dm (or dm
+               (::data-model (force ds)))]
+    (sql/to-sql dm qargs :quoting (when ds (sql/detect-quoting
+                                             (force ds))))))
 
 ;;;;
 

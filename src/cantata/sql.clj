@@ -169,13 +169,12 @@
       (and (vector? q) (string? (first q)))
       (and (sequential? q) (string? (first q)))))
 
-(defn to-sql [ds dm q]
+(defn to-sql [dm q & {:keys [quoting]}]
   (cond
    (string? q) [q]
    (and (vector? q) (string? (first q))) q
    (and (sequential? q) (string? (first q))) (vec q)
-   :else (let [quoting (detect-quoting ds)
-               {:keys [q resolved-paths]} (cq/prep-query dm q)]
+   :else (let [{:keys [q resolved-paths]} (cq/prep-query dm q)]
            (hq/format
              (qualify-query dm quoting q resolved-paths)
              :quoting quoting))))
@@ -188,7 +187,7 @@
 
 ;;TODO: prepared queries/statements
 (defn query [ds dm q callback]
-  (let [sql-params (to-sql ds dm q)
+  (let [sql-params (to-sql dm q (detect-quoting ds))
         _ (when cu/*verbose* (prn sql-params))
         [cols & rows] (jd/query ds sql-params
                                 :identifiers dasherize
