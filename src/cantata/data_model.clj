@@ -195,14 +195,14 @@
 
 (defn resolve
   ([ent xname]
-    (if (identical? xname :*)
-      (r/->Resolved :wildcard :*)
-      (if-let [f (field ent xname)]
-       (r/->Resolved :field f)
-       (if-let [r (rel ent xname)]
-         (r/->Resolved :rel r)
-         (when-let [sc (shortcut ent xname)]
-           (r/->Resolved :shortcut sc))))))
+    (if-let [f (field ent xname)]
+      (r/->Resolved :field f)
+      (if-let [r (rel ent xname)]
+        (r/->Resolved :rel r)
+        (if-let [sc (shortcut ent xname)]
+          (r/->Resolved :shortcut sc)
+          (when (= (:name ent xname))
+            (r/->Resolved :entity ent))))))
   ([dm ename xname]
     (resolve (entity dm ename) xname)))
 
@@ -247,24 +247,27 @@
                                        (apply cu/join-path (conj seen-path shortcut-path))
                                        (apply cu/join-path (conj seen-path
                                                                  (-> resolved :value :name))))))
-             :rel (if (= :rel (:type resolved))
-                    (let [rel (:value resolved)
-                          ename* (:ename rel)
-                          ent* (entity dm ename*)
-                          seen-path* (conj seen-path rname)
-                          [seen-path* joined-seen-path] (let [joined-seen-path (apply cu/join-path seen-path*)]
-                                                          (if-let [sc (shortcuts joined-seen-path)]
-                                                            [(cu/split-path sc) sc]
-                                                            [seen-path* joined-seen-path]))
-                          link (r/->ChainLink
-                                 ent
-                                 ent*
-                                 (apply cu/join-path seen-path)
-                                 joined-seen-path
-                                 rel)]
-                      (recur (conj chain link)
-                             ent*
-                             (rest rnames)
-                             seen-path*
-                             shortcuts)))
+             :rel (let [rel (:value resolved)
+                        ename* (:ename rel)
+                        ent* (entity dm ename*)
+                        seen-path* (conj seen-path rname)
+                        [seen-path* joined-seen-path] (let [joined-seen-path (apply cu/join-path seen-path*)]
+                                                        (if-let [sc (shortcuts joined-seen-path)]
+                                                          [(cu/split-path sc) sc]
+                                                          [seen-path* joined-seen-path]))
+                        link (r/->ChainLink
+                               ent
+                               ent*
+                               (apply cu/join-path seen-path)
+                               joined-seen-path
+                               rel)]
+                    (recur (conj chain link)
+                           ent*
+                           (rest rnames)
+                           seen-path*
+                           shortcuts))
+             :entity (recur chain ent (rest rnames) seen-path shortcuts) 
              nil)))))))
+
+
+;; TODO: check rel validity
