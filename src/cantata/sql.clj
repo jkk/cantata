@@ -25,6 +25,10 @@
 (defmethod qualify :default [x quoting]
   x)
 
+(defmethod qualify :joined-entity [x quoting]
+  (let [ent (-> x :resolved :value)]
+    (identifier (:db-schema ent) (:db-name ent) quoting)))
+
 (defmethod qualify :entity [x quoting]
   (let [ent (-> x :resolved :value)]
     (identifier (:db-schema ent) (:db-name ent) quoting)))
@@ -35,6 +39,10 @@
     (if (seq chain)
       (identifier (-> chain peek :to-path) fname quoting)
       (identifier (-> x :root :name) fname quoting))))
+
+(defmethod qualify :joined-field [x quoting]
+  (let [fname (-> x :resolved :value :db-name)]
+    (identifier (-> x :qualifier) fname quoting)))
 
 (defmethod qualify :agg-op [x quoting]
   (let [v (-> x :resolved :value)
@@ -54,7 +62,7 @@
 (def ^:dynamic *subquery-depth* -1)
 
 (defmulti qualify-clause
-  (fn [clause clause-val data-model quoting resolved-paths]
+  (fn [clause clause-val data-model quoting env]
     clause))
 
 (defmethod qualify-clause :default [_ cval _ _ _]
@@ -68,28 +76,34 @@
       (throw (ex-info (str "Unrecognized entity name in :from - " from)
                       {:from from})))))
 
-;; TODO: subqueries
-(defmethod qualify-clause :select [_ select _ quoting rps]
-  (for [field select]
-    ;; TODO: respect explicit aliases?
-    (let [qfield (qualify (rps field field) quoting)]
-      (if (cq/wildcard? field)
-        qfield
-        [qfield (identifier field quoting)]))))
+(declare qualify-query)
 
-;; TODO: subqueries
-(defn qualify-pred-fields [pred quoting rps]
+(defmethod qualify-clause :select [_ select dm quoting rps]
+  (for [field select]
+    (let [[field alias] (if (vector? field)
+                          field
+                          [field])] 
+      (let [qfield (if (map? field)
+                     (qualify-query dm quoting field rps)
+                     (qualify (rps field field) quoting))]
+        (if (cq/wildcard? field)
+          qfield
+          [qfield (or alias (identifier field quoting))])))))
+
+(defn qualify-pred-fields [pred dm quoting rps]
   (when pred
     (let [fields (cq/get-predicate-fields pred)
           smap (into {} (for [f fields]
-                          [f (qualify (rps f f) quoting)]) )]
+                          [f (if (map? f)
+                               (qualify-query dm quoting f rps)
+                               (qualify (rps f f) quoting))]) )]
       (cq/replace-predicate-fields pred smap))))
 
-(defmethod qualify-clause :where [_ where _ quoting rps]
- (qualify-pred-fields where quoting rps))
+(defmethod qualify-clause :where [_ where dm quoting rps]
+ (qualify-pred-fields where dm quoting rps))
 
-(defmethod qualify-clause :having [_ where _ quoting rps]
- (qualify-pred-fields where quoting rps))
+(defmethod qualify-clause :having [_ where dm quoting rps]
+ (qualify-pred-fields where dm quoting rps))
 
 (defmethod qualify-clause :order-by [_ order-by _ quoting rps]
  (when order-by
@@ -107,33 +121,35 @@
      (qualify (rps fname fname) quoting))))
 
 ;; TODO: subqueries
-(defn- qualify-join [joins quoting rps]
+(defn- qualify-join [joins dm quoting rps]
  (mapcat (fn [[to on]]
            (let [ename (if (vector? to) (first to) to)
                  path (if (vector? to)
                         (second to)
                         ename)
                  qpath (identifier path quoting)
-                 qename (qualify (rps path path) quoting)
-                 on* (qualify-pred-fields on quoting rps)]
+                 qename (if (map? ename)
+                          (qualify-query dm quoting ename rps)
+                          (qualify (rps path path) quoting))
+                 on* (qualify-pred-fields on dm quoting rps)]
              [[qename qpath] on*]))
          (partition 2 joins)))
 
-(defmethod qualify-clause :join [_ joins _ quoting rps]
- (qualify-join joins quoting rps))
+(defmethod qualify-clause :join [_ joins dm quoting rps]
+ (qualify-join joins dm quoting rps))
 
-(defmethod qualify-clause :left-join [_ joins _ quoting rps]
- (qualify-join joins quoting rps))
+(defmethod qualify-clause :left-join [_ joins dm quoting rps]
+ (qualify-join joins dm quoting rps))
 
-(defmethod qualify-clause :right-join [_ joins _ quoting rps]
- (qualify-join joins quoting rps))
+(defmethod qualify-clause :right-join [_ joins dm quoting rps]
+ (qualify-join joins dm quoting rps))
 
 ;; TODO: traverse into SqlCalls?
-(defn qualify-query [dm quoting q resolved-paths]
+(defn qualify-query [dm quoting q env]
   (binding [*subquery-depth* (inc *subquery-depth*)]
     (reduce-kv
       (fn [q clause cval]
-        (let [cval* (qualify-clause clause cval dm quoting resolved-paths)]
+        (let [cval* (qualify-clause clause cval dm quoting env)]
           (if (and (not (nil? cval))
                    (or (not (coll? cval*))
                        (seq cval*)))
@@ -174,9 +190,10 @@
    (string? q) [q]
    (and (vector? q) (string? (first q))) q
    (and (sequential? q) (string? (first q))) (vec q)
-   :else (let [{:keys [q resolved-paths]} (cq/prep-query dm q)]
+   (and (vector? (first q)) (string? (ffirst q))) (first q)
+   :else (let [{:keys [q env]} (cq/prep-query dm q)]
            (hq/format
-             (qualify-query dm quoting q resolved-paths)
+             (qualify-query dm quoting q env)
              :quoting quoting))))
 
 (defn dasherize [s]
@@ -199,7 +216,7 @@
     (throw (ex-info "query-count not supported on plain SQL"
                     {:q q})))
   (let [quoting (detect-quoting ds)
-        {:keys [q resolved-paths]} (cq/prep-query dm q)
+        {:keys [q env]} (cq/prep-query dm q)
         ent (cdm/entity dm (:from q))
         select (if (or flat
                        (not-any? q [:join :left-join :right-join]))
@@ -213,7 +230,7 @@
         q (-> q
             (dissoc :limit :offset)
             (assoc :select select))
-        sql (hq/format (qualify-query dm quoting q resolved-paths)
+        sql (hq/format (qualify-query dm quoting q env)
                        :quoting quoting)]
     (query ds dm sql (fn [_ rows]
                        (ffirst rows)))))
