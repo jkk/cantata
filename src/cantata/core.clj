@@ -101,7 +101,12 @@
   (first
     (apply query ds (add-limit-1 qargs))))
 
-(defn by-id [ds & qargs])
+(defn by-id [ds & ename+id+args]
+  (let [[dm [ename id & qargs]] (get-dm+args ds ename+id+args)]
+    (let [ent (cdm/entity dm ename)]
+      (apply query1 ds
+             {:from ename :where [:= id (:pk ent)]}
+             qargs))))
 
 (defn query-count [ds & qargs]
   (let [[dm qargs] (get-dm+args ds qargs)]
