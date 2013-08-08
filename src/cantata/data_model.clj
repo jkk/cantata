@@ -7,41 +7,56 @@
             [clojure.string :as string])
   (:import [cantata.records Entity Field Rel DataModel]))
 
+(defn normalize-spec [spec]
+  (cond
+    (map? spec) spec
+    (keyword? spec) {:name spec}))
+
 (defn make-field [m]
-  (when-not (:name m)
-    (throw (ex-info "No :name provided for field"
-                    {:rel-spec m})))
-  (r/map->Field
-    (if (:db-name m)
-      m
-      (assoc m :db-name (reflect/guess-db-name (:name m))))))
+  (let [m (normalize-spec m)]
+    (when-not (:name m)
+      (throw (ex-info "No :name provided for field"
+                      {:rel-spec m})))
+    (r/map->Field
+      (if (:db-name m)
+        m
+        (assoc m :db-name (reflect/guess-db-name (:name m)))))))
 
 (defn guess-rel-key [rname]
   (let [[_ basename] (cu/unqualify rname)]
     (keyword (str (name basename) "-id"))))
 
 (defn make-rel [m & [other-ents]]
-  (when-not (:name m)
-    (throw (ex-info "No :name provided for rel"
-                    {:rel-spec m})))
-  (r/map->Rel
-    (let [name (:name m)
-          ename (:ename m)]
-      (cond-> m
-              (not ename) (assoc :ename name)
-              (and (not (:key m))
-                   (not (:reverse m))) (assoc :key (guess-rel-key name))
-              (and (not (:other-key m))
-                   other-ents) (as-> m
-                                     (assoc m :other-key (:pk (other-ents (:ename m)))))
-              (nil? (:reverse m)) (assoc :reverse false)))))
+  (let [m (normalize-spec m)]
+    (when-not (:name m)
+      (throw (ex-info "No :name provided for rel"
+                      {:rel-spec m})))
+    (r/map->Rel
+      (let [name (:name m)
+            ename (:ename m)]
+        (cond-> m
+                (not ename) (assoc :ename name)
+                (and (not (:key m))
+                     (not (:reverse m))) (assoc :key (guess-rel-key name))
+                (and (not (:other-key m))
+                     other-ents) (as-> m
+                                       (assoc m :other-key (:pk (other-ents (:ename m)))))
+                (nil? (:reverse m)) (assoc :reverse false))))))
 
 (defn make-shortcut [m]
-  (r/map->Shortcut m))
+  (let [m (if (sequential? m)
+            {:name (first m)
+             :path (second m)}
+            m)]
+    (when-not (and (:name m) (:path m))
+      (throw (ex-info "Shortcut must contain :name and :path"
+                      {:shortcut-spec m})))
+    (r/map->Shortcut m)))
 
 (defn ^:private ordered-map-by-name [maps f]
   (reduce
-    #(assoc %1 (:name %2) (f %2))
+    #(let [v (f %2)]
+       (assoc %1 (:name v) v))
     (om/ordered-map)
     maps))
 
@@ -88,6 +103,9 @@
 
 (defn data-model [& entity-specs]
   ;; TODO: enforce naming uniqueness, check for bad rels
+  (when-let [bad-spec (first (remove map? entity-specs))]
+    (throw (ex-info (str "Invalid entity spec: " bad-spec)
+                    {:entity-spec bad-spec})))
   (let [;; Wait to init rels, so we can guess PK/FKs more reliably
         ents (ordered-map-by-name (map #(dissoc % :rels) entity-specs)
                                   make-entity)
