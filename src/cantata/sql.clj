@@ -59,25 +59,28 @@
   cval)
 
 (defmethod qualify-clause :from [_ from dm quoting _]
-  (if-let [ent (cdm/entity dm from)]
-    [[(identifier (:db-name ent) quoting) from]]
-    (throw (ex-info (str "Unrecognized entity name in :from - " from)
-                    {:from from}))))
+  (if-not dm
+    [from]
+    (if-let [ent (cdm/entity dm from)]
+      [[(identifier (:db-name ent) quoting) from]]
+      (throw (ex-info (str "Unrecognized entity name in :from - " from)
+                      {:from from})))))
 
 ;; TODO: subqueries
 (defmethod qualify-clause :select [_ select _ quoting rps]
   (for [field select]
-    ;; TODO: respect explicit aliases
-    (if-let [rp (rps field)]
-      [(qualify rp quoting) (identifier field quoting)]
-      field)))
+    ;; TODO: respect explicit aliases?
+    (let [qfield (qualify (rps field field) quoting)]
+      (if (cq/wildcard? field)
+        qfield
+        [qfield (identifier field quoting)]))))
 
 ;; TODO: subqueries
 (defn qualify-pred-fields [pred quoting rps]
   (when pred
     (let [fields (cq/get-predicate-fields pred)
           smap (into {} (for [f fields]
-                          [f (qualify (rps f) quoting)]) )]
+                          [f (qualify (rps f f) quoting)]) )]
       (cq/replace-predicate-fields pred smap))))
 
 (defmethod qualify-clause :where [_ where _ quoting rps]
@@ -91,7 +94,7 @@
    (for [f order-by]
      (let [fname (if (coll? f) (first f) f)
            dir (when (coll? f) (second f))
-           qfield (qualify (rps fname) quoting)]
+           qfield (qualify (rps fname fname) quoting)]
        (if dir
          [qfield dir]
          qfield)))))
@@ -99,7 +102,7 @@
 (defmethod qualify-clause :group-by [_ group-by _ quoting rps]
  (when group-by
    (for [fname group-by]
-     (qualify (rps fname) quoting))))
+     (qualify (rps fname fname) quoting))))
 
 ;; TODO: subqueries
 (defn- qualify-join [joins quoting rps]
@@ -108,8 +111,10 @@
                  path (if (vector? to)
                         (second to)
                         ename)
-                 qpath (identifier path quoting)
-                 qename (qualify (rps path) quoting)
+                 qpath (if (rps path)
+                         (identifier path quoting)
+                         path)
+                 qename (qualify (rps path path) quoting)
                  on* (qualify-pred-fields on quoting rps)]
              [[qename qpath] on*]))
          (partition 2 joins)))

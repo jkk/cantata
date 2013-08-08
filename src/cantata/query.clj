@@ -267,16 +267,16 @@
                keyword)
         rent (-> (resolve-path dm entity qenv path)
                :resolved :value)]
-    (if-not rent
-      (throw (ex-info (str "Unrecognized wildcard: " field)
-                      {:field field :entity entity}))
+    (if (or (not rent) (empty? (dm/field-names rent)))
+      [field]
       (map #(cu/join-path path %)
            (dm/field-names rent)))))
 
 (defn expand-wildcards [dm entity fields & [qenv]]
   (mapcat (fn [field]
             (cond
-             (= :* field) (dm/field-names entity)
+             (= :* field) (or (seq (dm/field-names entity))
+                              [(keyword (str (name (:name entity)) ".*"))])
              (wildcard? field) (expand-wildcard dm entity field qenv)
              :else [field]))
           fields))
@@ -342,12 +342,12 @@
   (apply concat (cu/distinct-key (comp second first)
                                  (partition 2 joins))))
 
-(defn- expand-implicit-joins [q resolved-fields env]
-  (let [chains (keep (comp seq :chain) resolved-fields)
+(defn- expand-implicit-joins [q resolved-paths env]
+  (let [chains (keep (comp seq :chain) resolved-paths)
         joins (mapcat #(build-joins (:chain %) (:shortcuts %))
                       (cu/distinct-key
                         (comp :to-path peek :chain)
-                        (filter (comp seq :chain) resolved-fields)))
+                        (filter (comp seq :chain) resolved-paths)))
         joins (apply concat (for [[[_ alias :as to] on] (partition 2 joins)
                                   :when (not (env alias))]
                               [to on]))
@@ -459,59 +459,65 @@
     q))
 
 (defn resolve-paths [dm ent qenv paths]
-  (reduce
-    (fn [rps path]
-      (if-let [rp (resolve-path dm ent qenv path)]
-        (let [rps (assoc rps path rp)
-              qual (when (keyword? path)
-                     (first (cu/unqualify path)))]
-          (if qual
-            (assoc rps qual (resolve-path dm ent qenv qual))
-            rps))
-        (throw (ex-info (str "Unrecognized path " path " for entity "
-                             (:name ent))
-                        {:path path :entity ent}))))
-    (om/ordered-map)
-    paths))
+  (let [no-fields? (empty? (:fields ent))]
+    (reduce
+     (fn [rps path]
+       (let [rp (or (resolve-path dm ent qenv path)
+                    ;; When no entity fields defined, assume all unqualified
+                    ;; keywords are entity fields
+                    (when (and no-fields? (keyword? path) (cu/unqualified? path))
+                      (let [resolved (r/->Resolved :field (dm/make-field {:name path}))]
+                        (r/->ResolvedPath ent [] resolved {}))))
+             rps (if rp
+                   (assoc rps path rp)
+                   rps)
+             [qual basename] (when (keyword? path)
+                               (cu/unqualify path))]
+         (if qual
+           (assoc rps qual (resolve-path dm ent qenv qual))
+           rps)))
+     (om/ordered-map)
+     paths)))
 
 (defn prep-query
   "Prepares a query for execution by expanding wildcard fields, implicit joins,
   and subqueries. Returns the transformed query and gathered information."
   [dm qargs & {:keys [expand-joins env] :or {expand-joins true}}]
-  (when-not dm
-    (throw (ex-info "No data-model provided" {:qargs qargs})))
   (let [q (apply build-query (if (map? qargs) [qargs] qargs))
-        ent (dm/entity dm (:from q))
-        _ (when-not (and ent (dm/entity? ent))
-            (throw (ex-info (str "Invalid :from - " (:from q))
-                            {:q q})))
-        q (if (:select q) q (assoc q :select [:*]))
-        q (if (:include q)
-            (if (false? expand-joins)
-              (expand-rel-select dm ent q :include)
-              (expand-rel-joins dm ent q :include))
-            q)
-        q (if (:with q)
-            (if (false? expand-joins)
-              (expand-rel-select dm ent q :with)
-              (expand-rel-joins dm ent q :with))
-            q)
-        qenv (merge env (get-query-env dm q))
-        q (assoc q :select (vec (expand-wildcards dm ent (:select q) qenv)))
-        q (if (:without q) (expand-without q) q)
-        fields (get-all-fields q)
-        rps (resolve-paths dm ent qenv fields)
-        [q qenv fields rps] (if (false? expand-joins)
-                              [q qenv fields rps]
-                              (let [q (expand-implicit-joins q (vals rps) qenv)
-                                    qenv (merge env (get-query-env dm q))
-                                    fields (get-all-fields q)
-                                    rps (resolve-paths dm ent nil fields)]
-                                [q qenv fields rps]))
-        subqs (filter map? fields)
-        subq-env (assoc qenv (:name ent) (r/->Resolved
-                                           :parent-entity
-                                           ent))
-        q (expand-subqueries dm q subqs subq-env)]
-    {:q q
-     :resolved-paths rps}))
+        q (if (:select q) q (assoc q :select [:*]))]
+    (if-not dm
+     {:q q
+      :resolved-paths {}}
+     (let [ent (dm/entity dm (:from q))
+           _ (when-not (and ent (dm/entity? ent))
+               (throw (ex-info (str "Invalid :from - " (:from q))
+                               {:q q})))
+           q (if (:include q)
+               (if (false? expand-joins)
+                 (expand-rel-select dm ent q :include)
+                 (expand-rel-joins dm ent q :include))
+               q)
+           q (if (:with q)
+               (if (false? expand-joins)
+                 (expand-rel-select dm ent q :with)
+                 (expand-rel-joins dm ent q :with))
+               q)
+           qenv (merge env (get-query-env dm q))
+           q (assoc q :select (vec (expand-wildcards dm ent (:select q) qenv)))
+           q (if (:without q) (expand-without q) q)
+           fields (get-all-fields q)
+           rps (resolve-paths dm ent qenv fields)
+           [q qenv fields rps] (if (false? expand-joins)
+                                 [q qenv fields rps]
+                                 (let [q (expand-implicit-joins q (vals rps) qenv)
+                                       qenv (merge env (get-query-env dm q))
+                                       fields (get-all-fields q)
+                                       rps (resolve-paths dm ent nil fields)]
+                                   [q qenv fields rps]))
+           subqs (filter map? fields)
+           subq-env (assoc qenv (:name ent) (r/->Resolved
+                                              :parent-entity
+                                              ent))
+           q (expand-subqueries dm q subqs subq-env)]
+       {:q q
+        :resolved-paths rps}))))

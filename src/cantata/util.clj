@@ -40,6 +40,10 @@
       [(keyword (subs s 0 doti))
        (keyword (subs s (inc doti)))])))
 
+(defn unqualified? [path]
+  (let [s ^String (name path)]
+    (neg? (.indexOf s (int \.) 0))))
+
 (defn collify [x]
   (if (coll? x) x [x]))
 
