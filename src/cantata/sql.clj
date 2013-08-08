@@ -111,9 +111,7 @@
                  path (if (vector? to)
                         (second to)
                         ename)
-                 qpath (if (rps path)
-                         (identifier path quoting)
-                         path)
+                 qpath (identifier path quoting)
                  qename (qualify (rps path path) quoting)
                  on* (qualify-pred-fields on quoting rps)]
              [[qename qpath] on*]))
