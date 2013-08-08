@@ -7,6 +7,8 @@
             [clojure.string :as string])
   (:import com.mchange.v2.c3p0.ComboPooledDataSource))
 
+(set! *warn-on-reflection* true)
+
 (defn identifier
   ([x quoting]
     (hq/raw (hq/quote-identifier x :style quoting :split false)))

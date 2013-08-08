@@ -5,6 +5,8 @@
             [clojure.string :as string]
             [flatland.ordered.map :as om]))
 
+(set! *warn-on-reflection* true)
+
 (defn- merge-where
   ([q where]
     (merge-where q where :where))

@@ -2,6 +2,8 @@
   (:require [clojure.string :as string]
             [flatland.ordered.map :as om]))
 
+(set! *warn-on-reflection* true)
+
 (def ^:dynamic *verbose* false)
 
 (defn ^:private reverse-rel-name? [^String s]
