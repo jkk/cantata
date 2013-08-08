@@ -533,7 +533,7 @@
                  (expand-rel-select dm ent q :with)
                  (expand-rel-joins dm ent q :with))
                q)
-           q (if (:without q) (expand-without q) q)
+           q (if (:without q) (expand-without dm ent q) q)
            q (assoc q :select (vec (expand-wildcards dm ent (:select q) env)))
            fields (get-all-fields q)
            env (resolve-paths dm ent env fields)
