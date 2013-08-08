@@ -315,7 +315,13 @@
     on))
 
 (defn- build-join-on [rel from to from-alias to-alias]
-  (let [{:keys [key other-key]} rel]
+  (let [{:keys [key other-key]} rel
+        key (or key (if (:reverse rel)
+                      (:pk from)
+                      (dm/guess-rel-key (:name rel))))
+        other-key (or other-key (if (:reverse rel)
+                                  (dm/guess-rel-key (:name from))
+                                  (:pk to)))]
     [:=
      (cu/join-path from-alias (or key (:pk from)))
      (cu/join-path to-alias (or other-key (:pk to)))]))

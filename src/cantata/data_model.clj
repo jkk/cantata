@@ -14,15 +14,20 @@
       (assoc m :db-name (reflect/guess-db-name (:name m))))))
 
 (defn guess-rel-key [rname]
-  (keyword (str (name rname) "-id")))
+  (let [[_ basename] (cu/unqualify rname)]
+    (keyword (str (name basename) "-id"))))
 
-(defn make-rel [m]
+(defn make-rel [m & [other-ents]]
   (r/map->Rel
     (let [name (:name m)
           ename (:ename m)]
       (cond-> m
               (not ename) (assoc :ename name)
-              (not (:key m)) (assoc :key (guess-rel-key name))
+              (and (not (:key m))
+                   (not (:reverse m))) (assoc :key (guess-rel-key name))
+              (and (not (:other-key m))
+                   other-ents) (as-> m
+                                     (assoc m :other-key (:pk (other-ents (:ename m)))))
               (nil? (:reverse m)) (assoc :reverse false)))))
 
 (defn make-shortcut [m]
@@ -78,14 +83,22 @@
 
 (defn data-model [& entity-specs]
   ;; TODO: enforce naming uniqueness, check for bad rels
-  (let [ents (ordered-map-by-name entity-specs make-entity)
+  (let [;; Wait to init rels, so we can guess PK/FKs more reliably
+        ents (ordered-map-by-name (map #(dissoc % :rels) entity-specs)
+                                  make-entity)
         ents (reduce
-               (fn [ents [ent rel]]
-                 (add-reverse-rels ents ent rel))
+               (fn [ents [ent rspec]]
+                 (if rspec
+                   (let [rel (make-rel rspec ents)]
+                     (-> ents
+                       (assoc-in [(:name ent) :rels (:name rel)] rel)
+                       (add-reverse-rels ent rel)))
+                   ents))
                ents
-               (for [ent (vals ents)
-                     rel (vals (:rels ent))]
-                 [ent rel]))]
+               (for [[ent rspecs] (map list (vals ents)
+                                       (map :rels entity-specs))
+                     rspec rspecs]
+                 [ent rspec]))]
     (r/->DataModel ents)))
 
 (defn data-model? [x]
