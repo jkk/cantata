@@ -138,5 +138,5 @@
               (apply ~(symbol "cdm" (name fn-name)) dm# args#))))))
 
 (def-dm-helpers
-  entities entity rels rel fields field field-names shortcut shortcuts)
+  entities entity rels rel fields field field-names shortcut shortcuts resolve-path)
 
