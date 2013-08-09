@@ -253,13 +253,14 @@
 (defn- resolve-joined-field [env path]
   (let [[qual basename] (cu/unqualify path)]
     (when-let [qrp (get env qual)]
-      (when (#{:joined-entity :parent-entity} (-> qrp :resolved :type))
+      (when (= :joined-entity (-> qrp :resolved :type))
         (let [jent (-> qrp :resolved :value)
               jfield (dm/field jent basename)]
           (when jfield (assoc (r/->ResolvedPath
-                               jent [] 
-                               (r/->Resolved :joined-field jfield)
-                               nil)
+                                path
+                                jent [] 
+                                (r/->Resolved :joined-field jfield)
+                                nil)
                               :qualifier qual)))))))
 
 (defn resolve-path [dm entity env path & opts]
@@ -270,7 +271,7 @@
       (when-let [rp (apply resolve-path dm entity env agg-path opts)]
         (let [resolved (r/->Resolved
                          :agg-op (r/->AggOp agg-op agg-path (:resolved rp)))]
-          (r/->ResolvedPath entity (:chain rp) resolved (:shortcuts rp)))))
+          (r/->ResolvedPath path entity (:chain rp) resolved (:shortcuts rp)))))
     (when dm
       (apply dm/resolve-path dm entity path opts))))
 
@@ -440,7 +441,7 @@
                 :when (not (get env alias))]
             (let [jent (dm/entity dm ename)
                   resolved (r/->Resolved :joined-entity jent)]
-              [alias (r/->ResolvedPath ent [] resolved nil)])))))
+              [alias (r/->ResolvedPath alias ent [] resolved nil)])))))
 
 (declare prep-query)
 
@@ -535,15 +536,13 @@
                q)
            q (if (:without q) (expand-without dm ent q) q)
            q (assoc q :select (vec (expand-wildcards dm ent (:select q) env)))
-           fields (get-all-fields q)
-           env (resolve-paths dm ent env fields)
-           [q env fields] (if (false? expand-joins)
-                            [q env fields]
-                            (let [q (expand-implicit-joins q env)
-                                  env (get-query-env dm ent q env)
-                                  fields (get-all-fields q)
-                                  env (resolve-paths dm ent env fields)]
-                              [q env fields]))
+           env (resolve-paths dm ent env (get-all-fields q))
+           [q env] (if (false? expand-joins)
+                     [q env]
+                     (let [q (expand-implicit-joins q env)
+                           env (get-query-env dm ent q env)
+                           env (resolve-paths dm ent env (get-all-fields q))]
+                       [q env]))
            ;; TODO: subqueries
            ;subqs (filter map? fields)
            ;q (expand-subqueries dm q subqs env)

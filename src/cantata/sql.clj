@@ -82,13 +82,14 @@
   (for [field select]
     (let [[field alias] (if (vector? field)
                           field
-                          [field])] 
-      (let [qfield (if (map? field)
-                     (qualify-query dm quoting field rps)
-                     (qualify (rps field field) quoting))]
-        (if (cq/wildcard? field)
-          qfield
-          [qfield (or alias (identifier field quoting))])))))
+                          [field])
+          qfield (if (map? field)
+                   (qualify-query dm quoting field rps)
+                   (qualify (rps field field) quoting))]
+      (if (cq/wildcard? field)
+        qfield
+        [qfield (or alias (identifier (or (:final-path (rps field)) field)
+                                      quoting))]))))
 
 (defn qualify-pred-fields [pred dm quoting rps]
   (when pred

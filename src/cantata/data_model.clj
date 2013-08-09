@@ -260,25 +260,28 @@
            resolved (resolve ent rname)]
        (if (and (not (next rnames))
                 (not= :shortcut (:type resolved)))
-         (if (= :rel (:type resolved))
-           (let [rel (:value resolved)
-                 ent* (entity dm (:ename rel))]
-             (r/->ResolvedPath
-               root
-               (conj chain (r/->ChainLink
-                             ent
-                             ent*
-                             (apply cu/join-path seen-path)
-                             (let [joined-seen-path (apply cu/join-path (conj seen-path rname))]
-                               (or (shortcuts joined-seen-path)
-                                   joined-seen-path))
-                             rel))
-               (r/->Resolved :entity ent*)
-               shortcuts))
-           (when-let [resolved (or resolved
-                                   (when lax ;pretend it's a field
-                                     (r/->Resolved :field (make-field {:name rname}))))]
-             (r/->ResolvedPath root chain resolved shortcuts)))
+         (let [final-path (let [joined-seen-path (apply cu/join-path
+                                                        (conj seen-path rname))]
+                            (or (shortcuts joined-seen-path)
+                                joined-seen-path))]
+           (if (= :rel (:type resolved))
+             (let [rel (:value resolved)
+                   ent* (entity dm (:ename rel))]
+               (r/->ResolvedPath
+                 final-path
+                 root
+                 (conj chain (r/->ChainLink
+                               ent
+                               ent*
+                               (apply cu/join-path seen-path)
+                               final-path
+                               rel))
+                 (r/->Resolved :entity ent*)
+                 shortcuts))
+             (when-let [resolved (or resolved
+                                     (when lax ;pretend it's a field
+                                       (r/->Resolved :field (make-field {:name rname}))))]
+               (r/->ResolvedPath final-path root chain resolved shortcuts))))
          (condp = (:type resolved)
            :shortcut (let [shortcut-path (-> resolved :value :path)]
                        (recur chain
