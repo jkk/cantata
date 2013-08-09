@@ -13,3 +13,4 @@ pom.xml.asc
 .settings
 .classpath
 .project
+.lein-env
