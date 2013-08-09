@@ -565,3 +565,62 @@
         ;q (expand-subqueries dm q subqs env)
         ]
     [q env]))
+
+(defn ^:private next-row-group [[row & rows] key-fn]
+  (when row
+    (let [key (key-fn row)]
+      (loop [group [row]
+             rows rows]
+        (let [row2 (first rows)]
+          (if (and row2 (= key (key-fn row2)))
+            (recur (conj group row2) (rest rows))
+            [group rows]))))))
+
+(defn ^:private group-rows [rows key-fn]
+  (lazy-seq
+    (when-let [[group rows] (next-row-group rows key-fn)]
+      (cons group (group-rows rows key-fn)))))
+
+(defn ^:private combine-row-group [group own-cols own-paths rel-paths-cols]
+  (let [m (cu/zip-ordered-map
+            own-paths (map (first group) own-cols))]
+    (reduce
+      (fn [m row]
+        (reduce
+          (fn [m [qual pcs]]
+            (update-in m [qual] (fnil conj #{})
+                       (reduce (fn [om [p c]]
+                                 (assoc om p (nth row c)))
+                               (om/ordered-map) pcs)))
+          m rel-paths-cols))
+      m group)))
+
+(defn ^:private juxt-cols [cols]
+  (apply juxt (map (fn [col] #(nth % col)) cols)))
+
+(defn ^:private get-key-fn [pk colmap own-cols]
+  (if pk
+    (if (sequential? pk)
+      (juxt-cols (map colmap pk))
+      (let [pkcol (colmap pk)]
+        #(nth % pkcol)))
+    (juxt-cols own-cols)))
+
+(defn nest
+  [cols rows pk]
+  (let [colmap (zipmap cols (range))
+        _ (when (and pk (not-every? colmap (dm/normalize-pk pk)))
+            (throw-info ["PK" pk "not present in query results"]
+                        {:pk pk :cols cols}))
+        [own-paths rel-paths] ((juxt filter remove) cu/unqualified? cols)
+        own-cols (map colmap own-paths)
+        rel-paths-cols (reduce
+                         (fn [om rel-path]
+                           (let [[qual basename] (cu/unqualify rel-path)]
+                             (update-in om [qual] (fnil conj [])
+                                        [basename (colmap rel-path)])))
+                         (om/ordered-map)
+                         rel-paths)
+        key-fn (get-key-fn pk colmap own-cols)]
+    (for [group (group-rows rows key-fn)]
+      (combine-row-group group own-cols own-paths rel-paths-cols))))

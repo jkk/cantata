@@ -219,8 +219,11 @@
         _ (when cu/*verbose* (prn sql-params))
         [cols & rows] (jd/query ds sql-params
                                 :identifiers dasherize
-                                :as-arrays? true)]
-    (callback cols rows)))
+                                :as-arrays? true)
+        qmeta {:cantata.core/query-from (cdm/entity dm (:from q))
+               :cantata.core/query-env env}]
+    (callback (with-meta cols qmeta)
+              rows)))
 
 (defn query-count [ds dm q & {:keys [flat]}]
   (when (plain-sql? q)

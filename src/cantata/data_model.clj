@@ -229,6 +229,11 @@
 (defn normalize-pk [pk]
   (cu/seqify pk))
 
+(defn pk-val [m pk]
+  (if (sequential? pk)
+    (mapv m pk)
+    (pk m)))
+
 ;;;;
 
 (defn resolve

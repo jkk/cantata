@@ -1,9 +1,10 @@
 (ns cantata.core
-  (:require [cantata.util :as cu]
+  (:require [cantata.util :as cu :refer [throw-info]]
             [cantata.data-model :as cdm]
             [cantata.query :as cq]
             [cantata.sql :as sql]
-            [clojure.java.jdbc :as jd]))
+            [clojure.java.jdbc :as jd]
+            [flatland.ordered.map :as om]))
 
 (defmacro verbose
   "Causes any wrapped queries or statements to print lots of logging
@@ -18,12 +19,12 @@
 (defn reflect-data-model [ds entity-specs]
   (cdm/reflect-data-model (force ds) entity-specs))
 
-(defn- normalize-db-spec [db-spec]
+(defn ^:private normalize-db-spec [db-spec]
   (cond
     (map? db-spec) db-spec
     (string? db-spec) {:connection-uri db-spec}
     (instance? java.net.URI db-spec) (normalize-db-spec (str db-spec))
-    :else (throw (ex-info "Unrecognized db-spec format" {:db-spec db-spec}))))
+    :else (throw-info "Unrecognized db-spec format" {:db-spec db-spec})))
 
 (defn data-source [db-spec & model+opts]
   (let [arg1 (first model+opts)
@@ -59,15 +60,42 @@
   `(with-query-rows* ~ds ~q (fn [~cols ~rows]
                               ~@body)))
 
-(defn query* [ds q]
+;; TODO: helpers from modelo - field, field1, result
+
+(defn get-query-env [x]
+  (::query-env (meta x)))
+
+(defn get-query-from [x]
+  (::query-from (meta x)))
+
+(defn nest
+  ([cols rows]
+    (nest cols rows (:pk (get-query-from cols))))
+  ([cols rows pk]
+    (cq/nest cols rows pk)))
+
+;;
+;; QUERY CHOICES
+;; * As nested maps, multiple queries - (query ...)
+;; * As nested maps, single query     - (query* ...)
+;; * As flat maps, single query       - (query* ... :flat true)
+;; * As vectors, single query         - (query* ... :vectors true)
+;;
+
+(defn query* [ds q & {:keys [vectors flat]}]
   (with-query-rows ds q cols rows
-    [cols rows]))
+    (cond
+      vectors [cols rows]
+      flat (mapv #(cu/zip-ordered-map cols %) rows)
+      ;; TODO: implicitly add/remove PK if necessary? :force-pk opt?
+      :else (nest cols rows))))
 
 (defn query [ds q]
   (with-query-rows ds q cols rows
-    (mapv #(cu/zip-ordered-map cols %) rows)))
+    ;; TODO
+    ))
 
-(defn- add-limit-1 [q]
+(defn ^:private add-limit-1 [q]
   (let [q (if (or (map? q) (string? q)) [q] q)
         qargs1 (first q)]
     (if (string? qargs1) ;support plain SQL
@@ -76,9 +104,13 @@
         (cons (str qargs1 " LIMIT 1") (rest q)))
       (concat q [:limit 1]))))
 
+(defn query1* [ds q & opts]
+  (first
+    (apply query* ds (add-limit-1 q) opts)))
+
 (defn query1 [ds q]
   (first
-    (query ds (add-limit-1 q))))
+    (query ds q)))
 
 (defn by-id [ds ename id & [q]]
   (let [ent (cdm/entity (get-data-model ds) ename)
