@@ -204,9 +204,15 @@
 (defn undasherize [s]
   (string/replace s "-" "_"))
 
-;;TODO: prepared queries/statements
-(defn query [ds dm q callback]
-  (let [sql-params (to-sql dm q :quoting (detect-quoting ds))
+;;TODO: prepared statements
+(defn query [ds dm q callback & {:keys [prepared env]}]
+  (let [[q env] (if (or prepared (plain-sql? q))
+                  [q env]
+                  (cq/prep-query dm q))
+        sql-params (to-sql dm q
+                           :quoting (detect-quoting ds)
+                           :prepared true
+                           :env env)
         _ (when cu/*verbose* (prn sql-params))
         [cols & rows] (jd/query ds sql-params
                                 :identifiers dasherize
@@ -231,13 +237,10 @@
                    [[(apply hq/call :count-distinct qpk) :cnt]]))
         q (-> q
             (dissoc :limit :offset)
-            (assoc :select select))
-        sql (to-sql dm q
-                    :quoting quoting
-                    :prepared true
-                    :env env)]
-    (query ds dm sql (fn [_ rows]
-                       (ffirst rows)))))
+            (assoc :select select))]
+    (query ds dm q #(ffirst %2)
+           :prepared true
+           :env env)))
 
 (defn insert! [ds dm ename changes opts])
 (defn update! [ds dm ename changes pred opts])
