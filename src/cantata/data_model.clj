@@ -2,7 +2,7 @@
   (:refer-clojure :exclude [resolve])
   (:require [cantata.reflect :as reflect]
             [cantata.records :as r]
-            [cantata.util :as cu]
+            [cantata.util :as cu :refer [throw-info]]
             [flatland.ordered.map :as om]
             [clojure.string :as string])
   (:import [cantata.records Entity Field Rel DataModel]))
@@ -15,8 +15,7 @@
 (defn make-field [m]
   (let [m (normalize-spec m)]
     (when-not (:name m)
-      (throw (ex-info "No :name provided for field"
-                      {:rel-spec m})))
+      (throw-info "No :name provided for field" {:rel-spec m}))
     (r/map->Field
       (if (:db-name m)
         m
@@ -28,8 +27,7 @@
 (defn make-rel [m & [other-ents]]
   (let [m (normalize-spec m)]
     (when-not (:name m)
-      (throw (ex-info "No :name provided for rel"
-                      {:rel-spec m})))
+      (throw "No :name provided for rel" {:rel-spec m}))
     (r/map->Rel
       (let [name (:name m)
             ename (:ename m)]
@@ -48,8 +46,8 @@
              :path (second m)}
             m)]
     (when-not (and (:name m) (:path m))
-      (throw (ex-info "Shortcut must contain :name and :path"
-                      {:shortcut-spec m})))
+      (throw-info "Shortcut must contain :name and :path"
+                  {:shortcut-spec m}))
     (r/map->Shortcut m)))
 
 (defn ^:private ordered-map-by-name [maps f]
@@ -61,16 +59,15 @@
 
 (defn make-entity [m]
   (when-not (:name m)
-    (throw (ex-info "No :name provided for entity"
-                    {:entity-spec m})))
+    (throw-info "No :name provided for entity"
+                {:entity-spec m}))
   (r/map->Entity
     (let [fields (ordered-map-by-name (:fields m) make-field)
           pk (or (:pk m)
                  (when-let [field1 (first fields)]
                    (key field1))
-                 (throw (ex-info (str "No :pk provided for entity "
-                                      (:name m))
-                                 {:entity-spec m})))
+                 (throw-info ["No :pk provided for entity" (:name m)]
+                             {:entity-spec m}))
           rels (ordered-map-by-name (:rels m) make-rel)
           shortcuts (ordered-map-by-name (:shortcuts m) make-shortcut)]
       (cond-> (assoc m
@@ -122,8 +119,8 @@
   ;; TODO: enforce naming uniqueness
   (let [entity-specs (normalize-entity-specs entity-specs)]
     (when-let [bad-spec (first (remove map? entity-specs))]
-      (throw (ex-info (str "Invalid entity spec: " bad-spec)
-                      {:entity-spec bad-spec})))
+      (throw-info ["Invalid entity spec:" bad-spec]
+                  {:entity-spec bad-spec}))
     (let [;; Wait to init rels, so we can guess PK/FKs more reliably
           ents (ordered-map-by-name (map #(dissoc % :rels) entity-specs)
                                     make-entity)
@@ -324,20 +321,20 @@
       (when rel
         (let [rent (entity dm (:ename rel))]
           (when-not rent
-            (throw (ex-info (str "Invalid entity name " (:ename rel) " in rel "
-                                 (:name rel) " in entity " (:name ent))
-                            {:rel rel :entity ent})))
+            (throw-info ["Invalid entity name" (:ename rel)
+                         "in rel" (:name rel) "in entity" (:name ent)]
+                        {:rel rel :entity ent}))
           (when-let [key (:key rel)]
             (or (resolve ent key)
                 (empty? (fields ent))
-                (throw (ex-info (str "Invalid rel :key " key " in rel "
-                                     (:name rel) " in entity " (:name ent))
-                                {:rel rel :entity ent}))))
+                (throw-info ["Invalid rel :key" key
+                             "in rel" (:name rel) "in entity" (:name ent)]
+                            {:rel rel :entity ent})))
           (when-let [other-key (:other-key rel)]
             (or (resolve rent other-key)
                 (empty? (fields rent))
-                (throw (ex-info (str "Invalid rel :other-key " key " in rel "
-                                     (:name rel) " in entity " (:name ent))
-                                {:rel rel :entity ent}))))))))
+                (throw-info ["Invalid rel :other-key" key
+                             "in rel" (:name rel) "in entity" (:name ent)]
+                            {:rel rel :entity ent})))))))
   dm)
 

@@ -1,7 +1,7 @@
 (ns cantata.sql
   (:require [cantata.data-model :as cdm]
             [cantata.query :as cq]
-            [cantata.util :as cu]
+            [cantata.util :as cu :refer [throw-info]]
             [clojure.java.jdbc :as jd]
             [honeysql.core :as hq]
             [clojure.string :as string])
@@ -73,8 +73,8 @@
     [from]
     (if-let [ent (cdm/entity dm from)]
       [[(identifier (:db-name ent) quoting) from]]
-      (throw (ex-info (str "Unrecognized entity name in :from - " from)
-                      {:from from})))))
+      (throw-info ["Unrecognized entity name in :from - " from]
+                  {:from from}))))
 
 (declare qualify-query)
 
@@ -221,8 +221,7 @@
 
 (defn query-count [ds dm q & {:keys [flat]}]
   (when (plain-sql? q)
-    (throw (ex-info "query-count not supported on plain SQL"
-                    {:q q})))
+    (throw-info "query-count not supported on plain SQL" {:q q}))
   (let [quoting (detect-quoting ds)
         [q env] (cq/prep-query dm q)
         ent (cdm/entity dm (:from q))

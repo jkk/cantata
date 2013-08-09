@@ -1,5 +1,5 @@
 (ns cantata.query
-  (:require [cantata.util :as cu]
+  (:require [cantata.util :as cu :refer [throw-info]]
             [cantata.data-model :as dm]
             [cantata.records :as r]
             [clojure.string :as string]
@@ -247,7 +247,7 @@
 
 (defn agg [op path]
   (when-not (aggregate-ops op)
-    (throw (ex-info (str "Invalid aggregate op: " op) {:op op})))
+    (throw-info ["Invalid aggregate op:" op] {:op op}))
   (cu/join-path (str "%" (name op)) path))
 
 (defn- resolve-joined-field [env path]
@@ -317,9 +317,8 @@
         (if-let [rp (dm/resolve-path dm ent path)]
           (let [npk (dm/normalize-pk (-> rp :resolved :value :pk))]
             [:= nil (cu/join-path path (first npk))])
-          (throw (ex-info
-                   (str "Invalid path in :without clause: " path)
-                   {:path path})))))))
+          (throw-info ["Invalid path in :without clause:" path]
+                      {:path path}))))))
 
 (defn- expand-without [dm ent q]
   (merge-where (dissoc q :without)
@@ -383,9 +382,9 @@
             rp (dm/resolve-path dm ent path)
             rent (-> rp :resolved :value)
             _ (when-not rent
-                (throw (ex-info (str "Unrecognized path " path " for entity "
-                                     (:name ent))
-                                {:path path :entity ent})))
+                (throw-info ["Unrecognized path" path
+                             "for entity" (:name ent)]
+                            {:path path :entity ent}))
             joins (build-joins (:chain rp) (:shortcuts rp) (:where opts))
             join-clause (if (= :include clause)
                           :left-join :join)
@@ -414,10 +413,9 @@
       (let [preds (for [[path] incls]
                     (let [rent (-> (dm/resolve-path dm ent path) :resolved :value)]
                       (if-not rent
-                        (throw (ex-info
-                                 (str "Unrecognized path " path " for entity "
-                                      (:name ent))
-                                 {:path path}))
+                        (throw-info ["Unrecognized path" path
+                                     "for entity" (:name ent)]
+                                    {:path path})
                         (let [npk (dm/normalize-pk (:pk rent))]
                           (if (= 1 (count npk))
                             [:not= nil (cu/join-path path (first npk))]
@@ -495,10 +493,9 @@
                         ;; All qualifiers MUST resolve
                         (if-let [rp (resolve-path dm ent env qual)]
                           (add-resolved-path env qual rp)
-                          (throw (ex-info
-                                   (str "Unrecognized path segment " qual
-                                        " for entity " (:name ent))
-                                   {:path qual :entity ent})))))
+                          (throw-info ["Unrecognized path segment" qual
+                                       "for entity" (:name ent)]
+                                      {:path qual :entity ent}))))
                     env quals)]
           (if (env path)
             env
@@ -506,9 +503,9 @@
             ;; keywords are entity fields
             (if-let [rp (resolve-path dm ent env path :lax no-fields?)]
               (add-resolved-path env path rp)
-              (throw (ex-info (str "Unrecognized path " path
-                                   " for entity " (:name ent))
-                              {:path path :entity ent}))))))
+              (throw-info ["Unrecognized path" path
+                           "for entity" (:name ent)]
+                          {:path path :entity ent})))))
       env
       (remove map? paths))))
 
@@ -530,12 +527,10 @@
     (if-not dm
      [q {}]
      (let [from (or (get-from q)
-                    (throw (ex-info (str "No :from found in query")
-                                    {:q q})))
+                    (throw-info "No :from found in query" {:q q}))
            ent (dm/entity dm from)
            _ (when-not (and ent (dm/entity? ent))
-               (throw (ex-info (str "Invalid :from - " from)
-                               {:q q})))
+               (throw-info ["Invalid :from -" from] {:q q}))
            q (if (:from q) q (assoc q :from from))
            env (merge {(:name ent) (assoc-in (dm/resolve-path dm ent (:name ent))
                                              [:resolved :type] :parent-entity)}

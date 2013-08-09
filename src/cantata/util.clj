@@ -115,3 +115,10 @@
              (next ks)
              (next vs))
       map)))
+
+(defn throw-info [msg data]
+  (throw
+    (ex-info (if (sequential? msg)
+               (apply str (interpose " " msg))
+               msg)
+             data)))
