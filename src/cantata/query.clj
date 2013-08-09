@@ -502,6 +502,14 @@
       env
       (remove map? paths))))
 
+(defn get-from [q]
+  (or (:from q)
+      (first
+        (for [path (:select q)
+              :let [quals (cu/qualifiers path)]
+              :when (= 1 (count quals))]
+          (first quals)))))
+
 ;; FIXME: need nested environments for subqueries to work
 (defn prep-query
   "Prepares a query for execution by expanding wildcard fields, implicit joins,
@@ -512,10 +520,14 @@
     (if-not dm
      {:q q
       :env {}}
-     (let [ent (dm/entity dm (:from q))
+     (let [from (or (get-from q)
+                    (throw (ex-info (str "No :from found in query")
+                                    {:q q})))
+           ent (dm/entity dm from)
            _ (when-not (and ent (dm/entity? ent))
-               (throw (ex-info (str "Invalid :from - " (:from q))
+               (throw (ex-info (str "Invalid :from - " from)
                                {:q q})))
+           q (if (:from q) q (assoc q :from from))
            env (merge {(:name ent) (assoc-in (dm/resolve-path dm ent (:name ent))
                                              [:resolved :type] :parent-entity)}
                       (get-query-env dm ent q env))
