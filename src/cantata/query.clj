@@ -256,12 +256,11 @@
       (when (= :joined-entity (-> qrp :resolved :type))
         (let [jent (-> qrp :resolved :value)
               jfield (dm/field jent basename)]
-          (when jfield (assoc (r/->ResolvedPath
-                                path
-                                jent [] 
-                                (r/->Resolved :joined-field jfield)
-                                nil)
-                              :qualifier qual)))))))
+          (when jfield (r/->ResolvedPath
+                         path
+                         jent [] 
+                         (r/->Resolved :joined-field jfield)
+                         nil)))))))
 
 (defn resolve-path [dm entity env path & opts]
   (or
