@@ -488,7 +488,7 @@
         (if (= final-path path)
           env
           (assoc env final-path rp)))
-      (throw-info ["Unrecognized path " path "for entity" (:name ent)]
+      (throw-info ["Unrecognized path" path "for entity" (:name ent)]
                   {:path path :entity ent}))))
 
 (defn resolve-and-add-paths [dm ent env paths]
