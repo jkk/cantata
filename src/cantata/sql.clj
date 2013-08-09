@@ -83,7 +83,7 @@
           qfield (if (map? field)
                    (qualify-query field quoting env)
                    (qualify (env field field) quoting))]
-      (if (cq/wildcard? field)
+      (if (or (= :* field) (cq/wildcard? field))
         qfield
         [qfield (or alias (identifier (or (:final-path (env field)) field)
                                       quoting))]))))
