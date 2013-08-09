@@ -475,27 +475,37 @@
             q [:join :left-join :right-join])]
     q))
 
+(defn- add-resolved-path [env path rp]
+  (let [env (assoc env path rp)
+        final-path (:final-path rp)]
+    (if (= final-path path)
+      env
+      (assoc env final-path rp))))
+
 (defn resolve-paths [dm ent env paths]
   (let [no-fields? (empty? (dm/fields ent))]
     (reduce
       (fn [env path]
         (let [quals (when (and (keyword? path) (not (agg? path)))
                       (cu/qualifiers path))
-              ;; All qualifiers MUST resolve
-              env (into env
-                        (for [qual quals
-                              :when (not (env qual))]
-                          [qual
-                           (or (resolve-path dm ent env qual)
-                               (throw (ex-info (str "Unrecognized path segment " qual
-                                                    " for entity " (:name ent))
-                                               {:path qual :entity ent})))]))]
+              env (reduce
+                    (fn [env qual]
+                      (if (env qual)
+                        env
+                        ;; All qualifiers MUST resolve
+                        (if-let [rp (resolve-path dm ent env qual)]
+                          (add-resolved-path env qual rp)
+                          (throw (ex-info
+                                   (str "Unrecognized path segment " qual
+                                        " for entity " (:name ent))
+                                   {:path qual :entity ent})))))
+                    env quals)]
           (if (env path)
             env
             ;; When no entity fields defined, pretend all unresolved
             ;; keywords are entity fields
             (if-let [rp (resolve-path dm ent env path :lax no-fields?)]
-              (assoc env path rp)
+              (add-resolved-path env path rp)
               (throw (ex-info (str "Unrecognized path " path
                                    " for entity " (:name ent))
                               {:path path :entity ent}))))))
