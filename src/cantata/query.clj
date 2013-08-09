@@ -575,19 +575,21 @@
     (when-let [[group rows] (next-row-group rows key-fn)]
       (cons group (group-rows rows key-fn)))))
 
-(defn ^:private combine-row-group [group own-cols own-paths rel-paths-cols]
-  (let [m (cu/zip-ordered-map
-            own-paths (map (first group) own-cols))]
-    (reduce
-      (fn [m row]
-        (reduce
-          (fn [m [qual pcs]]
-            (update-in m [qual] (fnil conj #{})
-                       (reduce (fn [om [p c]]
-                                 (assoc om p (nth row c)))
-                               (om/ordered-map) pcs)))
-          m rel-paths-cols))
-      m group)))
+(defn ^:private get-group-base [group own-cols own-paths]
+  (cu/zip-ordered-map
+    own-paths (map (first group) own-cols)))
+
+(defn ^:private nest-group-rels [group base rel-paths-cols]
+  (reduce
+    (fn [m row]
+      (reduce
+        (fn [m [qual pcs]]
+          (update-in m [qual] (fnil conj #{})
+                     (reduce (fn [om [p c]]
+                               (assoc om p (nth row c)))
+                             (om/ordered-map) pcs)))
+        m rel-paths-cols))
+    base group))
 
 (defn ^:private juxt-cols [cols]
   (apply juxt (map (fn [col] #(nth % col)) cols)))
@@ -600,21 +602,23 @@
         #(nth % pkcol)))
     (juxt-cols own-cols)))
 
-(defn nest
-  [cols rows pk]
+(defn nest [cols rows pk]
   (let [colmap (zipmap cols (range))
-        _ (when (and pk (not-every? colmap (dm/normalize-pk pk)))
-            (throw-info ["PK" pk "not present in query results"]
-                        {:pk pk :cols cols}))
         [own-paths rel-paths] ((juxt filter remove) cu/unqualified? cols)
-        own-cols (map colmap own-paths)
-        rel-paths-cols (reduce
-                         (fn [om rel-path]
-                           (let [[qual basename] (cu/unqualify rel-path)]
-                             (update-in om [qual] (fnil conj [])
-                                        [basename (colmap rel-path)])))
-                         (om/ordered-map)
-                         rel-paths)
-        key-fn (get-key-fn pk colmap own-cols)]
-    (for [group (group-rows rows key-fn)]
-      (combine-row-group group own-cols own-paths rel-paths-cols))))
+        own-cols (map colmap own-paths)]
+    (if (empty? rel-paths)
+      (mapv #(cu/zip-ordered-map cols %) rows) ;no rels, no nesting
+      (if (and pk (not-every? colmap (dm/normalize-pk pk)))
+        (throw-info ["Cannot nest: PK" pk "not present in query results"]
+                    {:pk pk :cols cols})
+        (let [rel-paths-cols (reduce
+                               (fn [om rel-path]
+                                 (let [[qual basename] (cu/unqualify rel-path)]
+                                   (update-in om [qual] (fnil conj [])
+                                              [basename (colmap rel-path)])))
+                               (om/ordered-map)
+                               rel-paths)
+              key-fn (get-key-fn pk colmap own-cols)]
+          (for [group (group-rows rows key-fn)]
+            (let [base (get-group-base group own-cols own-paths)]
+              (nest-group-rels group base rel-paths-cols))))))))
