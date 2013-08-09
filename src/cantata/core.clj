@@ -92,23 +92,14 @@
       ;; TODO: implicitly add/remove PK if necessary? :force-pk opt?
       :else (nest cols rows))))
 
+(defn query1* [ds q & opts]
+  (first
+    (apply query* ds (sql/add-limit-1 q) opts)))
+
 (defn query [ds q]
   (with-query-rows ds q cols rows
     ;; TODO
     ))
-
-(defn ^:private add-limit-1 [q]
-  (let [q (if (or (map? q) (string? q)) [q] q)
-        qargs1 (first q)]
-    (if (string? qargs1) ;support plain SQL
-      (if (re-find #"(?i)\blimit\s+\d+" qargs1)
-        q
-        (cons (str qargs1 " LIMIT 1") (rest q)))
-      (concat q [:limit 1]))))
-
-(defn query1* [ds q & opts]
-  (first
-    (apply query* ds (add-limit-1 q) opts)))
 
 (defn query1 [ds q]
   (first
@@ -118,6 +109,7 @@
   (let [ent (cdm/entity (get-data-model ds) ename)
         baseq {:from ename :where [:= id (:pk ent)]}]
     (first
+      ;; TODO: use query?
       (query* ds (if (map? q)
                  [baseq q]
                  (cons baseq q))))))

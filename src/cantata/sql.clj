@@ -247,6 +247,15 @@
            :prepared true
            :env env)))
 
+(defn add-limit-1 [q]
+  (let [q (if (or (map? q) (string? q)) [q] q)
+        qargs1 (first q)]
+    (if (string? qargs1) ;support plain SQL
+      (if (re-find #"(?i)\blimit\s+\d+" qargs1)
+        q
+        (cons (str qargs1 " LIMIT 1") (rest q)))
+      (concat q [:limit 1]))))
+
 (defn insert! [ds dm ename changes opts])
 (defn update! [ds dm ename changes pred opts])
 (defn delete! [ds dm ename pred opts])
