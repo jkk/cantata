@@ -448,7 +448,7 @@
   (let [;; subqueries in :select, :where, and :having
         q (if (empty? subqs)
             q
-            (let [smap (zipmap subqs (map #(:q (prep-query dm % :env env)) subqs))]
+            (let [smap (zipmap subqs (map #(first (prep-query dm % :env env)) subqs))]
               (cu/assoc-present
                 q
                 :select (vec (replace smap (:select q)))
@@ -468,7 +468,7 @@
                                       (let [el1 (first el)]
                                         (if (and (map? el1)
                                                  (not (dm/entity? el1)))
-                                          [(:q (prep-query dm el1 :env env))
+                                          [(first (prep-query dm el1 :env env))
                                            (second el)]
                                           el))))
                                   (clause q))))))
@@ -518,8 +518,7 @@
   (let [q (apply build-query (if (map? qargs) [qargs] qargs))
         q (if (:select q) q (assoc q :select [:*]))]
     (if-not dm
-     {:q q
-      :env {}}
+     [q {}]
      (let [from (or (get-from q)
                     (throw (ex-info (str "No :from found in query")
                                     {:q q})))
@@ -558,5 +557,4 @@
            ;subqs (filter map? fields)
            ;q (expand-subqueries dm q subqs env)
            ]
-       {:q q
-        :env env}))))
+       [q env]))))

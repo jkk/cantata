@@ -186,12 +186,14 @@
       (and (vector? q) (string? (first q)))
       (and (sequential? q) (string? (first q)))))
 
-(defn to-sql [dm q & {:keys [quoting]}]
+(defn to-sql [dm q & {:keys [quoting prepared env]}]
   (cond
    (string? q) [q]
    (and (vector? q) (string? (first q))) q
    (and (sequential? q) (string? (first q))) (vec q)
-   :else (let [{:keys [q env]} (cq/prep-query dm q)]
+   :else (let [[q env] (if prepared
+                         [q env]
+                         (cq/prep-query dm q))]
            (hq/format
              (qualify-query dm quoting q env)
              :quoting quoting))))
@@ -216,22 +218,24 @@
     (throw (ex-info "query-count not supported on plain SQL"
                     {:q q})))
   (let [quoting (detect-quoting ds)
-        {:keys [q env]} (cq/prep-query dm q)
+        [q env] (cq/prep-query dm q)
         ent (cdm/entity dm (:from q))
         select (if (or flat
                        (not-any? q [:join :left-join :right-join]))
-                 [(hq/call :count (hq/raw "*"))]
+                 [[(hq/call :count (hq/raw "*")) :cnt]]
                  (let [npk (cdm/normalize-pk (:pk ent))
                        qpk (for [pk npk]
                              (qualify
                                (cdm/resolve-path dm ent npk)
                                quoting))]
-                   [(apply hq/call :count-distinct qpk)]))
+                   [[(apply hq/call :count-distinct qpk) :cnt]]))
         q (-> q
             (dissoc :limit :offset)
             (assoc :select select))
-        sql (hq/format (qualify-query dm quoting q env)
-                       :quoting quoting)]
+        sql (to-sql dm q
+                    :quoting quoting
+                    :prepared true
+                    :env env)]
     (query ds dm sql (fn [_ rows]
                        (ffirst rows)))))
 
