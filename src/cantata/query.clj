@@ -526,44 +526,42 @@
   and subqueries. Returns the transformed query and a map of resolved paths."
   [dm qargs & {:keys [expand-joins env] :or {expand-joins true}}]
   (let [q (apply build-query (if (map? qargs) [qargs] qargs))
-        q (if (:select q) q (assoc q :select [:*]))]
-    (if-not dm
-     [q {}]
-     (let [from (or (get-from q)
-                    (throw-info "No :from found in query" {:q q}))
-           ent (dm/entity dm from)
-           _ (when-not (and ent (dm/entity? ent))
-               (throw-info ["Invalid :from -" from] {:q q}))
-           q (if (:from q) q (assoc q :from from))
-           env (merge {(:name ent) (dm/resolve-path dm ent (:name ent))}
-                      (get-query-env dm ent q env))
-           env (resolve-paths dm ent env
-                              (concat (keys (:include q))
-                                      (keys (:with q))
-                                      (:without q)))
-           q (if (:include q)
-               (if (false? expand-joins)
-                 (expand-rel-select q env :include)
-                 (expand-rel-joins q env :include))
-               q)
-           q (if (:with q)
-               (if (false? expand-joins)
-                 (expand-rel-select q env :with)
-                 (expand-rel-joins q env :with))
-               q)
-           q (if (:without q)
-               (expand-without q env)
-               q)
-           q (assoc q :select (vec (expand-wildcards dm ent (:select q) env)))
-           env (resolve-paths dm ent env (get-all-fields q))
-           [q env] (if (false? expand-joins)
-                     [q env]
-                     (let [q (expand-implicit-joins q env)
-                           env (get-query-env dm ent q env)
-                           env (resolve-paths dm ent env (get-all-fields q))]
-                       [q env]))
-           ;; TODO: subqueries
-           ;subqs (filter map? fields)
-           ;q (expand-subqueries dm q subqs env)
-           ]
-       [q env]))))
+        q (if (:select q) q (assoc q :select [:*]))
+        from (or (get-from q)
+                 (throw-info "No :from found in query" {:q q}))
+        ent (dm/entity dm from)
+        _ (when-not (and ent (dm/entity? ent))
+            (throw-info ["Invalid :from -" from] {:q q}))
+        q (if (:from q) q (assoc q :from from))
+        env (merge {(:name ent) (dm/resolve-path dm ent (:name ent))}
+                   (get-query-env dm ent q env))
+        env (resolve-paths dm ent env
+                           (concat (keys (:include q))
+                                   (keys (:with q))
+                                   (:without q)))
+        q (if (:include q)
+            (if (false? expand-joins)
+              (expand-rel-select q env :include)
+              (expand-rel-joins q env :include))
+            q)
+        q (if (:with q)
+            (if (false? expand-joins)
+              (expand-rel-select q env :with)
+              (expand-rel-joins q env :with))
+            q)
+        q (if (:without q)
+            (expand-without q env)
+            q)
+        q (assoc q :select (vec (expand-wildcards dm ent (:select q) env)))
+        env (resolve-paths dm ent env (get-all-fields q))
+        [q env] (if (false? expand-joins)
+                  [q env]
+                  (let [q (expand-implicit-joins q env)
+                        env (get-query-env dm ent q env)
+                        env (resolve-paths dm ent env (get-all-fields q))]
+                    [q env]))
+        ;; TODO: subqueries
+        ;subqs (filter map? fields)
+        ;q (expand-subqueries dm q subqs env)
+        ]
+    [q env]))

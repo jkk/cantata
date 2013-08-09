@@ -188,14 +188,14 @@
       (and (vector? q) (string? (first q)))
       (and (sequential? q) (string? (first q)))))
 
-(defn to-sql [dm q & {:keys [quoting prepared env]}]
+(defn to-sql [q & {:keys [data-model quoting prepared env]}]
   (cond
    (string? q) [q]
    (and (vector? q) (string? (first q))) q
    (and (sequential? q) (string? (first q))) (vec q)
-   :else (let [[q env] (if prepared
+   :else (let [[q env] (if (or prepared (not data-model))
                          [q env]
-                         (cq/prep-query dm q))]
+                         (cq/prep-query data-model q))]
            (hq/format
              (qualify-query q quoting (or env {}))
              :quoting quoting))))
@@ -211,7 +211,8 @@
   (let [[q env] (if (or prepared (plain-sql? q))
                   [q env]
                   (cq/prep-query dm q))
-        sql-params (to-sql dm q
+        sql-params (to-sql q
+                           :data-model dm
                            :quoting (detect-quoting ds)
                            :prepared true
                            :env env)
