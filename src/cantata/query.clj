@@ -277,25 +277,36 @@
 (defn expand-wildcard
   "Expands a wildcard field into a sequence of all fields for the given
   entity."
-  [dm entity field & [env]]
+  [dm env field]
   (let [path (-> (name field)
                (string/replace #"\.\*$" "")
                keyword)
-        rent (-> (resolve-path dm entity env path)
-               :resolved :value)]
+        rent (-> (env path) :resolved :value)]
     (if (or (not rent) (empty? (dm/field-names rent)))
       [field]
       (map #(cu/join-path path %)
            (dm/field-names rent)))))
 
-(defn expand-wildcards [dm entity fields & [env]]
+(defn expand-wildcards [dm entity fields env]
   (mapcat (fn [field]
             (cond
              (= :* field) (or (seq (dm/field-names entity))
                               [(keyword (str (name (:name entity)) ".*"))])
-             (wildcard? field) (expand-wildcard dm entity field env)
+             (wildcard? field) (expand-wildcard dm env field)
              :else [field]))
           fields))
+
+(def join-clauses [:join :left-join :right-join])
+
+(defn get-join-clauses [q]
+  (mapcat q join-clauses))
+
+(defn get-join-predicates [q]
+  (take-nth 2 (rest (get-join-clauses q))))
+
+(defn get-join-aliases [q]
+  (map #(if (vector? %) (first %) %)
+       (take-nth 2 (get-join-clauses q))))
 
 (defn get-all-fields
   "Returns all fields in the given query"
@@ -304,25 +315,22 @@
     (concat (:select q)
             (get-predicate-fields (:where q))
             (get-predicate-fields (:having q))
-            (mapcat get-predicate-fields
-                    (take-nth 2 (rest (mapcat q [:join :left-join :right-join]))))
+            (mapcat get-predicate-fields (get-join-predicates q))
             (:group-by q)
             (map #(if (coll? %) (first %) %) (:order-by q)))))
 
-(defn- get-without-where [dm ent without]
+(defn- get-without-where [without env]
   (let [without (cu/seqify without)]
     (into
       [:and]
       (for [path without]
-        (if-let [rp (dm/resolve-path dm ent path)]
-          (let [npk (dm/normalize-pk (-> rp :resolved :value :pk))]
-            [:= nil (cu/join-path path (first npk))])
-          (throw-info ["Invalid path in :without clause:" path]
-                      {:path path}))))))
+        (let [rp (env path)
+              npk (dm/normalize-pk (-> rp :resolved :value :pk))]
+          [:= nil (cu/join-path path (first npk))])))))
 
-(defn- expand-without [dm ent q]
+(defn- expand-without [q env]
   (merge-where (dissoc q :without)
-               (get-without-where dm ent (:without q))))
+               (get-without-where (:without q) env)))
 
 (defn- merge-on [on where]
   (if where
@@ -359,14 +367,17 @@
 
 (defn- expand-implicit-joins [q env]
   (let [chains (keep (comp seq :chain) (vals env))
+        already-joined (set (get-join-aliases q))
+        new-joins (cu/distinct-key
+                    (comp :to-path peek :chain)
+                    (filter (fn [rp]
+                              (let [chain (:chain rp)]
+                                (and (seq chain)
+                                     (not (already-joined
+                                            (-> chain peek :to-path))))))
+                            (vals env)))
         joins (mapcat #(build-joins (:chain %) (:shortcuts %))
-                      (cu/distinct-key
-                        (comp :to-path peek :chain)
-                        (filter (comp seq :chain) (vals env))))
-        joins (apply concat (for [[[_ alias :as to] on] (partition 2 joins)
-                                  :when (not= :joined-entity
-                                              (-> (env alias) :resolved :type))]
-                              [to on]))
+                      new-joins)
         join-clause (if (= :inner (:join-type (:options q)))
                       :join :left-join)]
     (if (empty? joins)
@@ -375,16 +386,12 @@
                                     (concat (join-clause q)
                                             joins)))))))
 
-(defn- expand-rel-joins [dm ent q clause]
+(defn- expand-rel-joins [q env clause]
   (reduce
     (fn [q incl]
       (let [[path opts] incl
-            rp (dm/resolve-path dm ent path)
+            rp (env path)
             rent (-> rp :resolved :value)
-            _ (when-not rent
-                (throw-info ["Unrecognized path" path
-                             "for entity" (:name ent)]
-                            {:path path :entity ent}))
             joins (build-joins (:chain rp) (:shortcuts rp) (:where opts))
             join-clause (if (= :include clause)
                           :left-join :join)
@@ -404,29 +411,25 @@
       (map #(cu/join-path path %) (:select opts)))
     incls))
 
-(defn- expand-rel-select [dm ent q clause]
+(defn- expand-rel-select [q env clause]
   (let [incls (clause q)
         q (assoc (dissoc q clause)
                  :select (concat (:select q)
                                  (incls->select incls)))]
     (if (= :with clause)
       (let [preds (for [[path] incls]
-                    (let [rent (-> (dm/resolve-path dm ent path) :resolved :value)]
-                      (if-not rent
-                        (throw-info ["Unrecognized path" path
-                                     "for entity" (:name ent)]
-                                    {:path path})
-                        (let [npk (dm/normalize-pk (:pk rent))]
-                          (if (= 1 (count npk))
-                            [:not= nil (cu/join-path path (first npk))]
-                            [:and (vec (for [pk npk]
-                                         [:not= nil (cu/join-path path pk)]))])))))]
+                    (let [rent (-> (env path) :resolved :value)
+                          npk (dm/normalize-pk (:pk rent))]
+                      (if (= 1 (count npk))
+                        [:not= nil (cu/join-path path (first npk))]
+                        [:and (vec (for [pk npk]
+                                     [:not= nil (cu/join-path path pk)]))])))]
         (merge-where q (vec (cons :and preds))))
       q)))
 
 (defn get-query-env [dm ent q & [env]]
   (into (or env {})
-        (let [joins (mapcat q [:join :left-join :right-join])]
+        (let [joins (get-join-clauses q)]
           (for [[to on] (partition 2 joins)
                 :let [to1 (if (vector? to) (first to) to)
                       [ename subq] (if (map? to1)
@@ -532,8 +535,7 @@
            _ (when-not (and ent (dm/entity? ent))
                (throw-info ["Invalid :from -" from] {:q q}))
            q (if (:from q) q (assoc q :from from))
-           env (merge {(:name ent) (assoc-in (dm/resolve-path dm ent (:name ent))
-                                             [:resolved :type] :parent-entity)}
+           env (merge {(:name ent) (dm/resolve-path dm ent (:name ent))}
                       (get-query-env dm ent q env))
            env (resolve-paths dm ent env
                               (concat (keys (:include q))
@@ -541,15 +543,17 @@
                                       (:without q)))
            q (if (:include q)
                (if (false? expand-joins)
-                 (expand-rel-select dm ent q :include)
-                 (expand-rel-joins dm ent q :include))
+                 (expand-rel-select q env :include)
+                 (expand-rel-joins q env :include))
                q)
            q (if (:with q)
                (if (false? expand-joins)
-                 (expand-rel-select dm ent q :with)
-                 (expand-rel-joins dm ent q :with))
+                 (expand-rel-select q env :with)
+                 (expand-rel-joins q env :with))
                q)
-           q (if (:without q) (expand-without dm ent q) q)
+           q (if (:without q)
+               (expand-without q env)
+               q)
            q (assoc q :select (vec (expand-wildcards dm ent (:select q) env)))
            env (resolve-paths dm ent env (get-all-fields q))
            [q env] (if (false? expand-joins)
