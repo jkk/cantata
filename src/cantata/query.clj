@@ -250,30 +250,6 @@
     (throw-info ["Invalid aggregate op:" op] {:op op}))
   (cu/join-path (str "%" (name op)) path))
 
-(defn- resolve-joined-field [env path]
-  (let [[qual basename] (cu/unqualify path)]
-    (when-let [qrp (get env qual)]
-      (when (= :joined-entity (-> qrp :resolved :type))
-        (let [jent (-> qrp :resolved :value)
-              jfield (dm/field jent basename)]
-          (when jfield (r/->ResolvedPath
-                         path
-                         jent [] 
-                         (r/->Resolved :joined-field jfield)
-                         nil)))))))
-
-(defn resolve-path [dm entity env path & opts]
-  (or
-    (get env path)
-    (resolve-joined-field env path)
-    (when-let [[agg-op agg-path] (parse-agg path)]
-      (when-let [rp (apply resolve-path dm entity env agg-path opts)]
-        (let [resolved (r/->Resolved
-                         :agg-op (r/->AggOp agg-op agg-path (:resolved rp)))]
-          (r/->ResolvedPath path entity (:chain rp) resolved (:shortcuts rp)))))
-    (when dm
-      (apply dm/resolve-path dm entity path opts))))
-
 (defn expand-wildcard
   "Expands a wildcard field into a sequence of all fields for the given
   entity."
@@ -304,6 +280,9 @@
 (defn get-join-predicates [q]
   (take-nth 2 (rest (get-join-clauses q))))
 
+(defn get-join-fields [q]
+  (mapcat get-predicate-fields (get-join-predicates q)))
+
 (defn get-join-aliases [q]
   (map #(if (vector? %) (first %) %)
        (take-nth 2 (get-join-clauses q))))
@@ -315,7 +294,7 @@
     (concat (:select q)
             (get-predicate-fields (:where q))
             (get-predicate-fields (:having q))
-            (mapcat get-predicate-fields (get-join-predicates q))
+            (get-join-fields q)
             (:group-by q)
             (map #(if (coll? %) (first %) %) (:order-by q)))))
 
@@ -476,14 +455,43 @@
             q [:join :left-join :right-join])]
     q))
 
-(defn- add-resolved-path [env path rp]
-  (let [env (assoc env path rp)
-        final-path (:final-path rp)]
-    (if (= final-path path)
-      env
-      (assoc env final-path rp))))
+(defn- resolve-joined-field [env path]
+  (let [[qual basename] (cu/unqualify path)]
+    (when-let [qrp (get env qual)]
+      (when (= :joined-entity (-> qrp :resolved :type))
+        (let [jent (-> qrp :resolved :value)
+              jfield (dm/field jent basename)]
+          (when jfield (r/->ResolvedPath
+                         path
+                         jent []
+                         (r/->Resolved :joined-field jfield)
+                         nil)))))))
 
-(defn resolve-paths [dm ent env paths]
+(defn resolve-path [dm ent env path & opts]
+  (or
+    (get env path)
+    (resolve-joined-field env path)
+    (when-let [[agg-op agg-path] (parse-agg path)]
+      (when-let [rp (apply resolve-path dm ent env agg-path opts)]
+        (let [resolved (r/->Resolved
+                         :agg-op (r/->AggOp agg-op agg-path (:resolved rp)))]
+          (r/->ResolvedPath path ent (:chain rp) resolved (:shortcuts rp)))))
+    (when dm
+      (apply dm/resolve-path dm ent path opts))))
+
+(defn- resolve-and-add-path [dm ent env path & opts]
+  (if (env path)
+    env
+    (if-let [rp (apply resolve-path dm ent env path opts)]
+      (let [env (assoc env path rp)
+            final-path (:final-path rp)]
+        (if (= final-path path)
+          env
+          (assoc env final-path rp)))
+      (throw-info ["Unrecognized path " path "for entity" (:name ent)]
+                  {:path path :entity ent}))))
+
+(defn resolve-and-add-paths [dm ent env paths]
   (let [no-fields? (empty? (dm/fields ent))]
     (reduce
       (fn [env path]
@@ -491,24 +499,9 @@
                       (cu/qualifiers path))
               env (reduce
                     (fn [env qual]
-                      (if (env qual)
-                        env
-                        ;; All qualifiers MUST resolve
-                        (if-let [rp (resolve-path dm ent env qual)]
-                          (add-resolved-path env qual rp)
-                          (throw-info ["Unrecognized path segment" qual
-                                       "for entity" (:name ent)]
-                                      {:path qual :entity ent}))))
+                      (resolve-and-add-path dm ent env qual))
                     env quals)]
-          (if (env path)
-            env
-            ;; When no entity fields defined, pretend all unresolved
-            ;; keywords are entity fields
-            (if-let [rp (resolve-path dm ent env path :lax no-fields?)]
-              (add-resolved-path env path rp)
-              (throw-info ["Unrecognized path" path
-                           "for entity" (:name ent)]
-                          {:path path :entity ent})))))
+          (resolve-and-add-path dm ent env path :lax no-fields?)))
       env
       (remove map? paths))))
 
@@ -535,10 +528,10 @@
         q (if (:from q) q (assoc q :from from))
         env (merge {(:name ent) (dm/resolve-path dm ent (:name ent))}
                    (get-query-env dm ent q env))
-        env (resolve-paths dm ent env
-                           (concat (keys (:include q))
-                                   (keys (:with q))
-                                   (:without q)))
+        env (resolve-and-add-paths
+              dm ent env (concat (keys (:include q))
+                                 (keys (:with q))
+                                 (:without q)))
         q (if (:include q)
             (if (false? expand-joins)
               (expand-rel-select q env :include)
@@ -553,12 +546,13 @@
             (expand-without q env)
             q)
         q (assoc q :select (vec (expand-wildcards dm ent (:select q) env)))
-        env (resolve-paths dm ent env (get-all-fields q))
+        env (resolve-and-add-paths dm ent env (get-all-fields q))
         [q env] (if (false? expand-joins)
                   [q env]
                   (let [q (expand-implicit-joins q env)
                         env (get-query-env dm ent q env)
-                        env (resolve-paths dm ent env (get-all-fields q))]
+                        env (resolve-and-add-paths
+                              dm ent env (get-join-fields q))]
                     [q env]))
         ;; TODO: subqueries
         ;subqs (filter map? fields)
