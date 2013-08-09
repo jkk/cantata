@@ -60,7 +60,7 @@
   `(with-query-rows* ~ds ~q (fn [~cols ~rows]
                               ~@body)))
 
-;; TODO: helpers from modelo - field, field1, result
+;; TODO: helpers from modelo - field, field1, col1
 
 (defn get-query-env [x]
   (::query-env (meta x)))
@@ -69,6 +69,8 @@
   (::query-from (meta x)))
 
 (defn nest
+  "Only one level of nesting - i.e., all related rows are relative to root
+  entity"
   ([cols rows]
     (nest cols rows (:pk (get-query-from cols))))
   ([cols rows pk]
@@ -115,15 +117,13 @@
 (defn by-id [ds ename id & [q]]
   (let [ent (cdm/entity (get-data-model ds) ename)
         baseq {:from ename :where [:= id (:pk ent)]}]
-    (query1 ds (if (map? q)
+    (first
+      (query* ds (if (map? q)
                  [baseq q]
-                 (cons baseq q)))))
+                 (cons baseq q))))))
 
-(defn query-count [ds q]
-  (sql/query-count (force ds) (get-data-model ds) q))
-
-(defn query-count* [ds q]
-  (sql/query-count (force ds) (get-data-model ds) q :flat true))
+(defn query-count [ds q & {:keys [flat]}]
+  (sql/query-count (force ds) (get-data-model ds) q :flat flat))
 
 (defn save! [ds dm ename changes opts])
 
