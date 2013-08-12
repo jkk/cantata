@@ -119,7 +119,7 @@
      (qualify (env fname fname) quoting))))
 
 ;; TODO: subqueries
-(defn- qualify-join [joins quoting env]
+(defn ^:private qualify-join [joins quoting env]
  (mapcat (fn [[to on]]
            (let [ename (if (vector? to) (first to) to)
                  path (if (vector? to)

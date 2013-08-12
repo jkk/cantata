@@ -7,7 +7,7 @@
 
 (set! *warn-on-reflection* true)
 
-(defn- merge-where
+(defn ^:private merge-where
   ([q where]
     (merge-where q where :where))
   ([q where clause]
@@ -30,14 +30,14 @@
 
 (declare merge-clauses)
 
-(defn- normalize-incl-opts [opts]
+(defn ^:private normalize-incl-opts [opts]
   (cond
     (keyword? opts) {:select [opts]}
     (sequential? opts) {:select opts}
     (map? opts) (into {} (map (juxt first normalize-clause)
                               opts))))
 
-(defn- normalize-include [clause-val]
+(defn ^:private normalize-include [clause-val]
   (if (map? clause-val)
     (into {} (for [[k v] clause-val]
                [k (normalize-incl-opts v)]))
@@ -108,7 +108,7 @@
 
 (declare build-query)
 
-(defn- expand-from [q]
+(defn ^:private expand-from [q]
   (if (map? (:from q))
       (let [inner-q (build-query (:from q))]
         (if (:from inner-q)
@@ -132,7 +132,7 @@
 
 (def logic-ops #{:and :or :xor :not})
 
-(defn- get-predicate-fields* [x]
+(defn ^:private get-predicate-fields* [x]
   (if (or (map? x) (keyword? x))
     [x]
     (when (vector? x)
@@ -145,7 +145,7 @@
     (mapcat get-predicate-fields (rest pred))
     (mapcat get-predicate-fields* (rest pred))))
 
-(defn- replace-predicate-fields* [x smap]
+(defn ^:private replace-predicate-fields* [x smap]
   (if (or (map? x) (keyword? x))
     (or (smap x) x)
     (if (vector? x)
@@ -160,7 +160,7 @@
                (map #(replace-predicate-fields % smap) args)
                (map #(replace-predicate-fields* % smap) args))))
 
-(defn- remove-predicate-fields* [[op & args] fields]
+(defn ^:private remove-predicate-fields* [[op & args] fields]
   (if (logic-ops op)
     (if-let [args* (seq (remove #{::sentinel}
                                 (map #(remove-predicate-fields* % fields)
@@ -298,7 +298,7 @@
             (:group-by q)
             (map #(if (coll? %) (first %) %) (:order-by q)))))
 
-(defn- get-without-where [without env]
+(defn ^:private get-without-where [without env]
   (let [without (cu/seqify without)]
     (into
       [:and]
@@ -307,16 +307,16 @@
               npk (dm/normalize-pk (-> rp :resolved :value :pk))]
           [:= nil (cu/join-path path (first npk))])))))
 
-(defn- expand-without [q env]
+(defn ^:private expand-without [q env]
   (merge-where (dissoc q :without)
                (get-without-where (:without q) env)))
 
-(defn- merge-on [on where]
+(defn ^:private merge-on [on where]
   (if where
     [:and on where]
     on))
 
-(defn- build-join-on [rel from to from-alias to-alias]
+(defn ^:private build-join-on [rel from to from-alias to-alias]
   (let [{:keys [key other-key]} rel
         key (or key (if (:reverse rel)
                       (:pk from)
@@ -328,7 +328,7 @@
      (cu/join-path from-alias key)
      (cu/join-path to-alias other-key)]))
 
-(defn- build-joins [chain shortcuts & [where]]
+(defn ^:private build-joins [chain shortcuts & [where]]
   (when (seq chain)
     (let [link (first chain)
           {:keys [from to from-path to-path rel]} link
@@ -340,11 +340,11 @@
           join [[(:name to) to-alias] (merge-on pred where)]]
       (concat join (build-joins (rest chain) shortcuts)))))
 
-(defn- distinct-joins [joins]
+(defn ^:private distinct-joins [joins]
   (apply concat (cu/distinct-key (comp second first)
                                  (partition 2 joins))))
 
-(defn- expand-implicit-joins [q env]
+(defn ^:private expand-implicit-joins [q env]
   (let [chains (keep (comp seq :chain) (vals env))
         already-joined (set (get-join-aliases q))
         new-joins (cu/distinct-key
@@ -365,7 +365,7 @@
                                     (concat (join-clause q)
                                             joins)))))))
 
-(defn- expand-rel-joins [q env clause]
+(defn ^:private expand-rel-joins [q env clause]
   (reduce
     (fn [q incl]
       (let [[path opts] incl
@@ -384,13 +384,13 @@
     (dissoc q clause)
     (clause q)))
 
-(defn- incls->select [incls]
+(defn ^:private incls->select [incls]
   (mapcat
     (fn [[path opts]]
       (map #(cu/join-path path %) (:select opts)))
     incls))
 
-(defn- expand-rel-select [q env clause]
+(defn ^:private expand-rel-select [q env clause]
   (let [incls (clause q)
         q (assoc (dissoc q clause)
                  :select (concat (:select q)
@@ -424,7 +424,7 @@
 
 (declare expand-query)
 
-(defn- expand-subqueries [dm q subqs env]
+(defn ^:private expand-subqueries [dm q subqs env]
   (let [;; subqueries in :select, :where, and :having
         q (if (empty? subqs)
             q
@@ -455,7 +455,7 @@
             q [:join :left-join :right-join])]
     q))
 
-(defn- resolve-joined-field [env path]
+(defn ^:private resolve-joined-field [env path]
   (let [[qual basename] (cu/unqualify path)]
     (when-let [qrp (get env qual)]
       (when (= :joined-entity (-> qrp :resolved :type))
@@ -479,7 +479,7 @@
     (when dm
       (apply dm/resolve-path dm ent path opts))))
 
-(defn- resolve-and-add-path [dm ent env path & opts]
+(defn ^:private resolve-and-add-path [dm ent env path & opts]
   (if (env path)
     env
     (if-let [rp (apply resolve-path dm ent env path opts)]

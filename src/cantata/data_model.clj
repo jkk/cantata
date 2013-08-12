@@ -143,7 +143,7 @@
 (defn data-model? [x]
   (instance? DataModel x))
 
-(defn- merge-entity-specs [es1 es2]
+(defn ^:private merge-entity-specs [es1 es2]
   (let [g1 (group-by :name es1)
         g2 (group-by :name es2)
         names (distinct (concat (keys g2) (keys g1)))]
