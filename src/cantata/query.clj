@@ -250,6 +250,10 @@
     (throw-info ["Invalid aggregate op:" op] {:op op}))
   (cu/join-path (str "%" (name op)) path))
 
+(defn param? [x]
+  (and (keyword? x)
+       (= \? (.charAt ^String (name x) 0))))
+
 (defn expand-wildcard
   "Expands a wildcard field into a sequence of all fields for the given
   entity."
@@ -476,6 +480,8 @@
         (let [resolved (r/->Resolved
                          :agg-op (r/->AggOp agg-op agg-path (:resolved rp)))]
           (r/->ResolvedPath path ent (:chain rp) resolved (:shortcuts rp)))))
+    (when (param? path)
+      (r/->ResolvedPath path ent [] (r/->Resolved :param path) nil))
     (when dm
       (apply dm/resolve-path dm ent path opts))))
 

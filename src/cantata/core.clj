@@ -53,17 +53,29 @@
 (defn build-query [& qargs]
   (apply cq/build-query qargs))
 
-(defn with-query-rows* [ds q body-fn]
-  (sql/query (force ds) (get-data-model ds) q body-fn))
+(defn with-query-rows*
+  ([ds q body-fn]
+    (with-query-rows ds q nil body-fn))
+  ([ds q opts body-fn]
+    (apply sql/query (force ds) (get-data-model ds) q body-fn
+           (if (map? opts)
+             (apply concat opts)
+             opts))))
 
 (defmacro with-query-rows [cols rows ds q & body]
   `(with-query-rows* ~ds ~q (fn [~cols ~rows]
                               ~@body)))
 
-(defn with-query-maps* [ds q body-fn]
-  (sql/query (force ds) (get-data-model ds) q
-             (fn [cols rows]
-               (body-fn (map #(cu/zip-ordered-map cols %) rows)))))
+(defn with-query-maps*
+  ([ds q body-fn]
+    (with-query-maps* ds q nil body-fn))
+  ([ds q opts body-fn]
+    (apply sql/query (force ds) (get-data-model ds) q
+           (fn [cols rows]
+             (body-fn (map #(cu/zip-ordered-map cols %) rows)))
+           (if (map? opts)
+             (apply concat opts)
+             opts))))
 
 (defmacro with-query-maps [maps ds q & body]
   `(with-query-maps* ~ds ~q (fn [~maps]
@@ -90,54 +102,59 @@
 ;; * As vectors, single query         - (flat-query ... :vectors true)
 ;;
 
-(defn flat-query [ds q & {:keys [vectors]}]
-  (with-query-rows cols rows ds q
-    (if vectors
-      [cols rows]
-      (mapv #(cu/zip-ordered-map cols %) rows))))
+(defn flat-query [ds q & {:keys [vectors] :as opts}]
+  (with-query-rows* ds q opts
+    (fn [cols rows]
+      (if vectors
+        [cols rows]
+        (mapv #(cu/zip-ordered-map cols %) rows)))))
 
-(defn flat-query1 [ds q & {:keys [vectors]}]
-  (with-query-rows cols rows ds (sql/add-limit-1 q)
-    (if vectors
-      [cols (first rows)]
-      (cu/zip-ordered-map cols (first rows)))))
+(defn flat-query1 [ds q & {:keys [vectors] :as opts}]
+  (with-query-rows* ds (sql/add-limit-1 q) opts
+    (fn [cols rows]
+      (if vectors
+        [cols (first rows)]
+        (cu/zip-ordered-map cols (first rows))))))
 
-(defn query* [ds q]
+(defn query* [ds q & opts]
   (when (sql/plain-sql? q)
     (throw-info "Use flat-query to run plain SQL queries" {:q q}))
-  (with-query-rows cols rows ds q
-    ;; TODO: implicitly add/remove PKs if necessary? :force-pk opt?
-    (nest cols rows)))
+  ;; TODO: implicitly add/remove PKs if necessary? :force-pk opt?
+  (with-query-rows* ds q opts
+    (fn [cols rows]
+            (nest cols rows))))
 
 (defn query1* [ds q & opts]
   (first
-    (query* ds (sql/add-limit-1 q))))
+    (apply query* ds (sql/add-limit-1 q) opts)))
 
 (declare query)
 
-(defn query1 [ds q]
+(defn query1 [ds q & opts]
   (first
-    (query ds (sql/add-limit-1 q))))
+    (apply query ds (sql/add-limit-1 q) opts)))
 
 (defn ^:private build-by-id-query [ds ename id]
   (let [ent (cdm/entity (get-data-model ds) ename)]
     {:from ename :where [:= id (:pk ent)]}))
 
-(defn by-id [ds ename id & [q]]
+(defn by-id [ds ename id & [q & opts]]
   (let [baseq (build-by-id-query ds ename id)]
-    (query1 ds (if (map? q)
-                 [baseq q]
-                 (cons baseq q)))))
+    (apply query1 ds (if (map? q)
+                       [baseq q]
+                       (cons baseq q))
+           opts)))
 
-(defn by-id* [ds ename id & [q]]
+(defn by-id* [ds ename id & [q & opts]]
   (let [baseq (build-by-id-query ds ename id)]
     (first
-      (query* ds (if (map? q)
-                   [baseq q]
-                   (cons baseq q))))))
+      (apply query* ds (if (map? q)
+                         [baseq q]
+                         (cons baseq q))
+             opts))))
 
-(defn query-count [ds q & {:keys [flat]}]
-  (sql/query-count (force ds) (get-data-model ds) q :flat flat))
+(defn query-count [ds q & opts]
+  (apply sql/query-count (force ds) (get-data-model ds) q opts))
 
 (defn save! [ds dm ename changes opts])
 
@@ -187,21 +204,21 @@
 
 ;;;;
 
-(defn ^:private fetch-one-maps [ds eq fields any-many?]
+(defn ^:private fetch-one-maps [ds eq fields any-many? opts]
   (let [q (assoc eq
                  :select fields
                  :modifiers (when any-many? [:distinct]))]
-    (query* ds q)))
+    (apply query* ds q opts)))
 
-(defn ^:private fetch-many-results [ds ent pk npk ids many-groups]
+(defn ^:private fetch-many-results [ds ent pk npk ids many-groups opts]
   (for [[qual fields] many-groups]
-    (let [maps (query* ds
-                       {:select (concat (remove (set fields) npk)
-                                        fields)
-                        :from (:name ent)
-                        :where [:in pk ids]
-                        :modifiers [:distinct]
-                        :order-by pk})]
+    (let [q {:select (concat (remove (set fields) npk)
+                             fields)
+             :from (:name ent)
+             :where [:in pk ids]
+             :modifiers [:distinct]
+             :order-by pk}
+          maps (apply query* ds q opts)]
       [qual (into {} (for [m maps]
                        [(cdm/pk-val m pk)
                         (m qual)]))])))
@@ -225,7 +242,7 @@
                   rel-maps)))
             m many-results))))))
 
-(defn query [ds q]
+(defn query [ds q & opts]
   (let [dm (get-data-model ds)
         [eq env] (cq/expand-query dm q :expand-joins false)
         ent (-> (env (:from eq)) :resolved :value)
@@ -257,7 +274,7 @@
      (throw-info
        "Multi-queries do not support aggregates or group-by for to-many-related fields"
        {:q q}))
-    (let [maps (fetch-one-maps ds eq one-fields any-many?)
+    (let [maps (fetch-one-maps ds eq one-fields any-many? opts)
           maps (if-not any-many?
                  (if pk?
                    maps
@@ -268,7 +285,7 @@
                                              many-fields)
                        many-results (when (seq maps)
                                       (fetch-many-results
-                                        ds ent pk npk ids many-groups))]
+                                        ds ent pk npk ids many-groups opts))]
                    (incorporate-many-results
                      pk pk? npk maps many-results env select-paths)))]
     (with-meta

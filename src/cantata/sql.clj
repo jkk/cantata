@@ -59,6 +59,9 @@
                    (identifier (-> chain peek :to-path) fname quoting))
                  (identifier (-> x :root :name) fname quoting))))))
 
+(defmethod qualify :param [x quoting]
+  (-> x :resolved :value))
+
 (def ^:dynamic *subquery-depth* -1)
 
 (defmulti qualify-clause
@@ -188,17 +191,18 @@
       (and (vector? q) (string? (first q)))
       (and (sequential? q) (string? (first q)))))
 
-(defn to-sql [q & {:keys [data-model quoting expanded env]}]
+(defn to-sql [q & {:keys [data-model quoting expanded env params]}]
   (cond
    (string? q) [q]
    (and (vector? q) (string? (first q))) q
    (and (sequential? q) (string? (first q))) (vec q)
-   :else (let [[q env] (if (or expanded (not data-model))
-                         [q env]
-                         (cq/expand-query data-model q))]
-           (hq/format
-             (qualify-query q quoting (or env {}))
-             :quoting quoting))))
+   :else (let [[eq env] (if (or expanded (not data-model))
+                          [q env]
+                          (cq/expand-query data-model q))
+               qq (qualify-query eq quoting (or env {}))]
+           (hq/format qq
+                      :quoting quoting
+                      :params params))))
 
 (defn dasherize [s]
   (string/replace s #"(?!^)_" "-"))
@@ -207,7 +211,7 @@
   (string/replace s "-" "_"))
 
 ;;TODO: prepared statements
-(defn query [ds dm q callback & {:keys [expanded env]}]
+(defn query [ds dm q callback & {:keys [expanded env params]}]
   (let [[q env] (if (or expanded (plain-sql? q))
                   [q env]
                   (cq/expand-query dm q))
@@ -215,7 +219,8 @@
                            :data-model dm
                            :quoting (detect-quoting ds)
                            :expanded true
-                           :env env)
+                           :env env
+                           :params params)
         _ (when cu/*verbose* (prn sql-params))
         [cols & rows] (jd/query ds sql-params
                                 :identifiers dasherize
@@ -225,7 +230,7 @@
     (callback (with-meta cols qmeta)
               rows)))
 
-(defn query-count [ds dm q & {:keys [flat]}]
+(defn query-count [ds dm q & {:keys [flat] :as opts}]
   (when (plain-sql? q)
     (throw-info "query-count not supported on plain SQL" {:q q}))
   (let [quoting (detect-quoting ds)
@@ -243,9 +248,10 @@
         q (-> q
             (dissoc :limit :offset)
             (assoc :select select))]
-    (query ds dm q #(ffirst %2)
+    (apply query ds dm q #(ffirst %2)
            :expanded true
-           :env env)))
+           :env env
+           (apply concat opts))))
 
 (defn add-limit-1 [q]
   (let [q (if (or (map? q) (string? q)) [q] q)
