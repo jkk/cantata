@@ -133,12 +133,12 @@
 (defmacro rollback? [ds]
   `(jd/db-is-rollback-only ~ds))
 
-(defn prep-query [ds-or-dm q & opts]
+(defn expand-query [ds-or-dm q & opts]
   (let [[ds dm] (if (cdm/data-model? ds-or-dm)
                   [nil ds-or-dm]
                   [ds-or-dm nil])
         dm (or dm (get-data-model ds))]
-    (apply cq/prep-query dm q opts)))
+    (apply cq/expand-query dm q opts)))
 
 (defn to-sql [ds-or-dm q & opts]
   (let [[ds dm] (if (cdm/data-model? ds-or-dm)

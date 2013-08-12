@@ -422,13 +422,13 @@
                   resolved (r/->Resolved :joined-entity jent)]
               [alias (r/->ResolvedPath alias ent [] resolved nil)])))))
 
-(declare prep-query)
+(declare expand-query)
 
 (defn- expand-subqueries [dm q subqs env]
   (let [;; subqueries in :select, :where, and :having
         q (if (empty? subqs)
             q
-            (let [smap (zipmap subqs (map #(first (prep-query dm % :env env)) subqs))]
+            (let [smap (zipmap subqs (map #(first (expand-query dm % :env env)) subqs))]
               (cu/assoc-present
                 q
                 :select (vec (replace smap (:select q)))
@@ -448,7 +448,7 @@
                                       (let [el1 (first el)]
                                         (if (and (map? el1)
                                                  (not (dm/entity? el1)))
-                                          [(first (prep-query dm el1 :env env))
+                                          [(first (expand-query dm el1 :env env))
                                            (second el)]
                                           el))))
                                   (clause q))))))
@@ -514,7 +514,7 @@
           (first quals)))))
 
 ;; FIXME: need nested environments for subqueries to work
-(defn prep-query
+(defn expand-query
   "Prepares a query for execution by expanding wildcard fields, implicit joins,
   and subqueries. Returns the transformed query and a map of resolved paths."
   [dm qargs & {:keys [expand-joins env] :or {expand-joins true}}]

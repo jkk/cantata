@@ -188,14 +188,14 @@
       (and (vector? q) (string? (first q)))
       (and (sequential? q) (string? (first q)))))
 
-(defn to-sql [q & {:keys [data-model quoting prepared env]}]
+(defn to-sql [q & {:keys [data-model quoting expanded env]}]
   (cond
    (string? q) [q]
    (and (vector? q) (string? (first q))) q
    (and (sequential? q) (string? (first q))) (vec q)
-   :else (let [[q env] (if (or prepared (not data-model))
+   :else (let [[q env] (if (or expanded (not data-model))
                          [q env]
-                         (cq/prep-query data-model q))]
+                         (cq/expand-query data-model q))]
            (hq/format
              (qualify-query q quoting (or env {}))
              :quoting quoting))))
@@ -207,14 +207,14 @@
   (string/replace s "-" "_"))
 
 ;;TODO: prepared statements
-(defn query [ds dm q callback & {:keys [prepared env]}]
-  (let [[q env] (if (or prepared (plain-sql? q))
+(defn query [ds dm q callback & {:keys [expanded env]}]
+  (let [[q env] (if (or expanded (plain-sql? q))
                   [q env]
-                  (cq/prep-query dm q))
+                  (cq/expand-query dm q))
         sql-params (to-sql q
                            :data-model dm
                            :quoting (detect-quoting ds)
-                           :prepared true
+                           :expanded true
                            :env env)
         _ (when cu/*verbose* (prn sql-params))
         [cols & rows] (jd/query ds sql-params
@@ -229,7 +229,7 @@
   (when (plain-sql? q)
     (throw-info "query-count not supported on plain SQL" {:q q}))
   (let [quoting (detect-quoting ds)
-        [q env] (cq/prep-query dm q)
+        [q env] (cq/expand-query dm q)
         ent (cdm/entity dm (:from q))
         select (if (or flat
                        (not-any? q [:join :left-join :right-join]))
@@ -244,7 +244,7 @@
             (dissoc :limit :offset)
             (assoc :select select))]
     (query ds dm q #(ffirst %2)
-           :prepared true
+           :expanded true
            :env env)))
 
 (defn add-limit-1 [q]
