@@ -58,7 +58,7 @@
 
 (defn with-query-rows*
   ([ds q body-fn]
-    (with-query-rows ds q nil body-fn))
+    (with-query-rows* ds q nil body-fn))
   ([ds q opts body-fn]
     (apply sql/query (force ds) (get-data-model ds) q body-fn
            (if (map? opts)
