@@ -234,6 +234,7 @@
   ([path]
     #(getf % path))
   ([qr path]
+    ;; TODO: allow sequential path -> maps getf over each
     (or
       (path qr)
       (let [ks (cu/split-path path)]
@@ -366,7 +367,10 @@
   "Returns a map with only the fields of the entity itself - no related
   fields."
   [ent m & {:as opts}]
-  (select-keys m (cdm/field-names ent)))
+  (let [fnames (cdm/field-names ent)]
+    (if (seq fnames)
+      (select-keys m (cdm/field-names ent))
+      (select-keys m (remove cu/first-qualifier (keys m))))))
 
 (defn insert!
   "Inserts an entity map or maps into the data source. Unlike save, the
@@ -411,3 +415,38 @@
         ids (cu/seqify id-or-ids)
         ent (cdm/entity dm ename)]
     (sql/delete! (force ds) dm ename [:in (:pk ent) ids])))
+
+;;;;
+
+(defn ^:private save-m [ds ent m]
+  (let [pk (:pk ent)
+        id (cdm/pk-val m pk)
+        ename (:name ent)]
+    (if (nil? id)
+      (insert! ds ename m)
+      (do
+        (if (flat-query1 ds [:from ename :select pk :where [:= pk id]])
+          (update! ds ename m [:= pk id])
+          (insert! ds ename m))
+        id))))
+
+(defn save!
+  "Saves entity map values to the database. If the primary key is included in
+  the map, the DB record will be updated if it exists. If it doesn't exist, or
+  if no primary key is provided, a new record will be inserted.
+
+  The map may include nested, related maps, which will in turn be saved and
+  associated with the top-level record. All saves happen within a transaction.
+
+  Returns the primary key of the updated or inserted record.
+
+  Accepts the following options:
+      :save-rels - when false, does not save related records"
+  [ds ename values & {:as opts}]
+  (let [dm (get-data-model ds)
+        ent (cdm/entity dm ename)
+        own-m (get-own-map entity values)]
+    (with-transaction ds
+      (save-m ds ent own-m)
+      (when-not (false? (:save-rels opts))
+        ))))
