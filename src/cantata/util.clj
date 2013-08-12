@@ -58,6 +58,12 @@
                 [(keyword sq)
                  (keyword (subs s (inc doti)))]))))))))
 
+(defn qualifier [path]
+  (first (unqualify path)))
+
+(defn basename [path]
+  (second (unqualify path)))
+
 (defn qualifiers [path]
   (loop [quals []
          [qual] (unqualify path)]
@@ -68,6 +74,15 @@
 (defn unqualified? [path]
   (let [s ^String (name path)]
     (neg? (.indexOf s (int \.) 0))))
+
+(defn first-qualifier [path]
+  (let [s ^String (name path)
+        doti (.indexOf s (int \.) 0)]
+    (when-not (neg? doti)
+      (keyword
+        (if (reverse-rel-name? s)
+          (subs s 0 (.indexOf s (int \.) (inc doti)))
+          (subs s 0 doti))))))
 
 (defn collify [x]
   (if (coll? x) x [x]))

@@ -575,50 +575,107 @@
     (when-let [[group rows] (next-row-group rows key-fn)]
       (cons group (group-rows rows key-fn)))))
 
-(defn ^:private get-group-base [group own-cols own-paths]
-  (cu/zip-ordered-map
-    own-paths (map (first group) own-cols)))
+(defn ^:private juxt-idxs [idxs]
+  (apply juxt (map (fn [i] #(nth % i)) idxs)))
 
-(defn ^:private nest-group-rels [group base rel-paths-cols]
-  (reduce
-    (fn [m row]
-      (reduce
-        (fn [m [qual pcs]]
-          (update-in m [qual] (fnil conj #{})
-                     (reduce (fn [om [p c]]
-                               (assoc om p (nth row c)))
-                             (om/ordered-map) pcs)))
-        m rel-paths-cols))
-    base group))
+(defn ^:private get-key-fn [pk-idxs own-idxs]
+  (if (seq pk-idxs)
+    (if (= 1 (count pk-idxs))
+      (let [pk-idx (first pk-idxs)]
+        #(nth % pk-idx))
+      (juxt-idxs pk-idxs))
+    (if (seq own-idxs)
+      (juxt-idxs own-idxs)
+      identity)))
 
-(defn ^:private juxt-cols [cols]
-  (apply juxt (map (fn [col] #(nth % col)) cols)))
+(defn ^:private takev [n v]
+  (subvec v 0 (min n (count v))))
 
-(defn ^:private get-key-fn [pk colmap own-cols]
-  (if pk
-    (if (sequential? pk)
-      (juxt-cols (map colmap pk))
-      (let [pkcol (colmap pk)]
-        #(nth % pkcol)))
-    (juxt-cols own-cols)))
+(defn ^:private dropv [n v]
+  (subvec v (min n (dec (count v)))))
 
-(defn nest [cols rows pk]
-  (let [colmap (zipmap cols (range))
-        [own-paths rel-paths] ((juxt filter remove) cu/unqualified? cols)
-        own-cols (map colmap own-paths)]
-    (if (empty? rel-paths)
-      (mapv #(cu/zip-ordered-map cols %) rows) ;no rels, no nesting
-      (if (and pk (not-every? colmap (dm/normalize-pk pk)))
-        (throw-info ["Cannot nest: PK" pk "not present in query results"]
-                    {:pk pk :cols cols})
-        (let [rel-paths-cols (reduce
-                               (fn [om rel-path]
-                                 (let [[qual basename] (cu/unqualify rel-path)]
-                                   (update-in om [qual] (fnil conj [])
-                                              [basename (colmap rel-path)])))
-                               (om/ordered-map)
-                               rel-paths)
-              key-fn (get-key-fn pk colmap own-cols)]
+(defn ^:private pops [v]
+  (loop [pops []
+         v (pop v)]
+    (if (zero? (count v))
+      pops
+      (recur (conj pops v) (pop v)))))
+
+(defn ^:private nest-in [m [k & ks] v]
+  (if ks
+    (assoc m k [(nest-in {} ks v)])
+    (assoc m k v)))
+
+(defn ^:private nest-group
+  [cols rows col->idx col->info all-path-parts path-parts pk-cols]
+  (let [pp-len (count path-parts)
+        cols* (if (empty? path-parts)
+                cols
+                (filter #(= path-parts (takev pp-len (nth (col->info %) 1)))
+                        cols))
+        [own-cols rel-cols] ((juxt filter remove)
+                              #(= path-parts (nth (col->info %) 1))
+                              cols*)
+        own-idxs (map col->idx own-cols)
+        own-basenames (map #(nth (col->info %) 2) own-cols)
+        pk-idxs	(keep col->idx pk-cols)
+        key-fn (get-key-fn pk-idxs own-idxs)]
+    ;; Having this makes nesting reliable, but also makes queries more tedious
+    ;; to write
+    #_(when (or (empty? pk-idxs) (not-every? identity pk-idxs))
+      (throw-info ["Cannot nest: PK cols" pk-cols "not present in query results"]
+                  {:pk-cols pk-cols :cols cols :path-parts path-parts}))
+    (if (empty? rel-cols)
+      (mapv #(cu/zip-ordered-map own-basenames (map % own-idxs))
+            (filter #(every? % pk-idxs) ;nil PK = absent outer-joined row
+                    (cu/distinct-key key-fn rows)))
+      (let [next-infos (cu/distinct-key
+                         first
+                         (for [rel-col rel-cols
+                               :let [info (col->info rel-col)
+                                     rel-pp (nth info 1)]
+                               :when (and (= path-parts (takev pp-len rel-pp))
+                                          ;; Either one rel away or no intermediate
+                                          ;; rels selected
+                                          (or (= (inc pp-len) (count rel-pp))
+                                              (not-any? all-path-parts
+                                                        (pops rel-pp))))]
+                           info))]
+        (into
+          []
           (for [group (group-rows rows key-fn)]
-            (let [base (get-group-base group own-cols own-paths)]
-              (nest-group-rels group base rel-paths-cols))))))))
+            (reduce
+              (fn [m [rel-pk-cols rel-pp]]
+                (nest-in m (dropv (count path-parts) rel-pp)
+                         (nest-group
+                           rel-cols group col->idx col->info all-path-parts rel-pp rel-pk-cols)))
+              (cu/zip-ordered-map
+                own-basenames (map (first group) own-idxs))
+              next-infos)))))))
+
+(defn ^:private get-rp-pk [resolved-path default-pk]
+  (if-let [chain (not-empty (:chain resolved-path))]
+    (-> chain peek :to :pk)
+    default-pk))
+
+(defn ^:private get-col-info [from-pk env col]
+  (let [rp (env col)
+        col-agg? (agg? col)
+        path-parts (if col-agg?
+                     []
+                     (pop (cu/split-path col)))
+        qual (when-not col-agg?
+               (cu/qualifier col))
+        pk-cols (mapv #(cu/join-path qual %)
+                      (dm/normalize-pk (get-rp-pk rp from-pk)))
+        basename (if col-agg?
+                   col
+                   (-> rp :resolved :value :name))]
+    [pk-cols path-parts basename]))
+
+(defn nest [cols rows from-ent env]
+  (let [col->idx (zipmap cols (range))
+        from-pk (:pk from-ent)
+        col->info (zipmap cols (map #(get-col-info from-pk env %) cols))
+        all-path-parts (set (map #(nth % 1) (vals col->info)))]
+    (nest-group cols rows col->idx col->info all-path-parts [] [from-pk])))

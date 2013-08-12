@@ -60,7 +60,7 @@
   `(with-query-rows* ~ds ~q (fn [~cols ~rows]
                               ~@body)))
 
-;; TODO: helpers from modelo - field, field1, col1
+;; TODO: helpers from modelo - field, field1, col1, merge-where, merge-select
 
 (defn get-query-env [x]
   (::query-env (meta x)))
@@ -68,13 +68,10 @@
 (defn get-query-from [x]
   (::query-from (meta x)))
 
+;; TODO: version that works on arbitrary vector/map data, sans env
 (defn nest
-  "Only one level of nesting - i.e., all related rows are relative to root
-  entity"
   ([cols rows]
-    (nest cols rows (:pk (get-query-from cols))))
-  ([cols rows pk]
-    (cq/nest cols rows pk)))
+    (cq/nest cols rows (get-query-from cols) (get-query-env cols))))
 
 ;;
 ;; QUERY CHOICES
@@ -88,13 +85,16 @@
   (with-query-rows ds q cols rows
     (cond
       vectors [cols rows]
-      flat (mapv #(cu/zip-ordered-map cols %) rows)
-      ;; TODO: implicitly add/remove PK if necessary? :force-pk opt?
+      (or flat (sql/plain-sql? q)) (mapv #(cu/zip-ordered-map cols %) rows)
+      ;; TODO: implicitly add/remove PKs if necessary? :force-pk opt?
       :else (nest cols rows))))
 
 (defn query1* [ds q & opts]
-  (first
-    (apply query* ds (sql/add-limit-1 q) opts)))
+  (let [ret (apply query* ds (sql/add-limit-1 q) opts)]
+    (if (vector? (first ret))
+      [(first ret) (first (second ret))]
+      (first ret))))
+
 
 (defn query [ds q]
   (with-query-rows ds q cols rows

@@ -234,6 +234,18 @@
     (mapv m pk)
     (pk m)))
 
+(defn pk-present?
+  "Returns true if m-or-fields contains pk. If pk is composite, all fields
+  must be present."
+  [m-or-fields pk]
+  (let [pk (normalize-pk pk)
+        num-pk (count pk)]
+    (if (map? m-or-fields)
+      (every? #(contains? m-or-fields %) pk)
+      (= num-pk
+         (count
+           (take num-pk (filter (set pk) m-or-fields)))))))
+
 ;;;;
 
 (defn resolve
