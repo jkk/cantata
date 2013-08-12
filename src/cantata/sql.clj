@@ -358,3 +358,25 @@
                ;; expire connections after 3 hours of inactivity:
                (.setMaxIdleTime (* 3 60 60)))] 
     {:datasource cpds}))
+
+;;;;
+
+;; clojure.java.jdbc hack to allow query logging
+
+(def ^:private db-do-prepared jd/db-do-prepared)
+
+(defn db-do-prepared-hook [db transaction? & [sql & param-groups :as opts]]
+  (if (string? transaction?)
+    (prn [transaction?])
+    (prn (into [sql] param-groups)))
+  (apply db-do-prepared db transaction? opts))
+
+(def ^:private db-do-prepared-return-keys jd/db-do-prepared-return-keys)
+
+(defn db-do-prepared-return-keys-hook
+  ([db sql param-group]
+    (prn (into [sql] param-group))
+    (db-do-prepared-return-keys db sql param-group))
+  ([db transaction? sql param-group]
+    (prn (into [sql] param-group))
+    (db-do-prepared-return-keys db transaction? sql param-group)))

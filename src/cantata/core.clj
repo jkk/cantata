@@ -7,13 +7,6 @@
             [clojure.java.jdbc :as jd]
             [flatland.ordered.map :as om]))
 
-(defmacro verbose
-  "Causes any wrapped queries or statements to print lots of logging
-  information during execution. See also 'debug'"
-  [& body]
-  `(binding [cu/*verbose* true]
-     ~@body))
-
 (defn data-model [entity-specs]
   (cdm/data-model entity-specs))
 
@@ -155,8 +148,11 @@
 
 (defn delete! [ds dm ename pred opts])
 
-(defmacro transaction [[ds-sym ds] & body]
-  `(jd/db-transaction [~ds-sym (force ~ds)] ~@body))
+(defmacro with-transaction [binding & body]
+  (let [[ds-sym ds] (if (symbol? binding)
+                      [binding binding]
+                      binding)]
+    `(jd/db-transaction [~ds-sym (force ~ds)] ~@body)))
 
 (defmacro rollback! [ds]
   `(jd/db-set-rollback-only! ~ds))
@@ -166,6 +162,34 @@
 
 (defmacro rollback? [ds]
   `(jd/db-is-rollback-only ~ds))
+
+(defmacro with-rollback [binding & body]
+  (let [[ds-sym ds] (if (symbol? binding)
+                      [binding binding]
+                      binding)]
+    `(with-transaction [~ds-sym ~ds]
+       (rollback! ~ds-sym)
+       ~@body)))
+
+(defmacro verbose
+  "Causes any wrapped queries or statements to print lots of logging
+  information during execution. See also 'debug'"
+  [& body]
+  `(binding [cu/*verbose* true]
+     (with-redefs [jd/db-do-prepared sql/db-do-prepared-hook
+                   jd/db-do-prepared-return-keys sql/db-do-prepared-return-keys-hook]
+       ~@body)))
+
+(defmacro debug
+  "Starts a transaction which will be rolled back when it ends, and prints
+  verbose information about all database activity.
+
+  WARNING: The underlying data source must actually support rollbacks. If it
+  doesn't, changes may be permanently committed."
+  [binding & body]
+  `(verbose
+     (with-rollback ~binding
+       ~@body)))
 
 (defn expand-query [ds-or-dm q & opts]
   (let [[ds dm] (if (cdm/data-model? ds-or-dm)
