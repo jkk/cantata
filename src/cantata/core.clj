@@ -1,6 +1,7 @@
 (ns cantata.core
   (:require [cantata.util :as cu :refer [throw-info]]
             [cantata.data-model :as cdm]
+            [cantata.data-source :as cds]
             [cantata.query :as cq]
             [cantata.sql :as sql]
             [clojure.java.jdbc :as jd]
@@ -19,13 +20,6 @@
 (defn reflect-data-model [ds entity-specs]
   (cdm/reflect-data-model (force ds) entity-specs))
 
-(defn ^:private normalize-db-spec [db-spec]
-  (cond
-    (map? db-spec) db-spec
-    (string? db-spec) {:connection-uri db-spec}
-    (instance? java.net.URI db-spec) (normalize-db-spec (str db-spec))
-    :else (throw-info "Unrecognized db-spec format" {:db-spec db-spec})))
-
 (defn data-source [db-spec & model+opts]
   (let [arg1 (first model+opts)
         [dm opts] (if (keyword? arg1)
@@ -38,7 +32,7 @@
                (if (cdm/data-model? dm)
                  dm
                  (data-model dm))))]
-    (cond-> (normalize-db-spec db-spec)
+    (cond-> (cds/normalize-db-spec db-spec)
             dm (assoc ::data-model dm)
             (contains? opts :quoting) (assoc ::quoting (:quoting opts)))))
 
