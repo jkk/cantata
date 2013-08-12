@@ -2,10 +2,12 @@
   (:require [cantata.data-model :as cdm]
             [cantata.query :as cq]
             [cantata.util :as cu :refer [throw-info]]
+            [cantata.records :as r]
             [clojure.java.jdbc :as jd]
             [honeysql.core :as hq]
             [clojure.string :as string])
-  (:import com.mchange.v2.c3p0.ComboPooledDataSource))
+  (:import com.mchange.v2.c3p0.ComboPooledDataSource
+           cantata.records.PreparedQuery))
 
 (set! *warn-on-reflection* true)
 
@@ -204,28 +206,49 @@
                       :quoting quoting
                       :params params))))
 
+(defn prepared? [q]
+  (instance? PreparedQuery q))
+
+;; TODO: prepared statements; need a way to manage open/close scope;
+;; maybe piggyback on transaction scope?
+(defn prepare [ds dm q & {:keys [expanded env] :as opts}]
+  (let [[eq env] (if (or expanded (plain-sql? q))
+                   [q env]
+                   (cq/expand-query dm q))
+        [sql] (apply to-sql eq
+                     :data-model dm
+                     :quoting (detect-quoting ds)
+                     :expanded true
+                     :env env
+                     (apply concat opts))
+        param-names (map cq/param-name (filter cq/param? (keys env)))]
+    (r/->PreparedQuery eq env sql param-names)))
+
 (defn dasherize [s]
   (string/replace s #"(?!^)_" "-"))
 
 (defn undasherize [s]
   (string/replace s "-" "_"))
 
-;;TODO: prepared statements
 (defn query [ds dm q callback & {:keys [expanded env params]}]
-  (let [[q env] (if (or expanded (plain-sql? q))
-                  [q env]
-                  (cq/expand-query dm q))
-        sql-params (to-sql q
-                           :data-model dm
-                           :quoting (detect-quoting ds)
-                           :expanded true
-                           :env env
-                           :params params)
+  (let [prepped? (prepared? q)
+        [eq env] (cond
+                   prepped? [(:expanded-query q) (:env q)]
+                   (or expanded (plain-sql? q)) [q env]
+                   :else (cq/expand-query dm q))
+        sql-params (if prepped?
+                     (into [(:sql q)] (map #(get params %) (:param-names q)))
+                     (to-sql eq
+                             :data-model dm
+                             :quoting (detect-quoting ds)
+                             :expanded true
+                             :env env
+                             :params params))
         _ (when cu/*verbose* (prn sql-params))
         [cols & rows] (jd/query ds sql-params
                                 :identifiers dasherize
                                 :as-arrays? true)
-        qmeta {:cantata.core/query-from (cdm/entity dm (:from q))
+        qmeta {:cantata.core/query-from (cdm/entity dm (:from eq))
                :cantata.core/query-env env}]
     (callback (with-meta cols qmeta)
               rows)))
@@ -254,13 +277,15 @@
            (apply concat opts))))
 
 (defn add-limit-1 [q]
-  (let [q (if (or (map? q) (string? q)) [q] q)
+  (if (prepared? q)
+    q
+    (let [q (if (or (map? q) (string? q)) [q] q)
         qargs1 (first q)]
-    (if (string? qargs1) ;support plain SQL
-      (if (re-find #"(?i)\blimit\s+\d+" qargs1)
-        q
-        (cons (str qargs1 " LIMIT 1") (rest q)))
-      (concat q [:limit 1]))))
+      (if (string? qargs1) ;support plain SQL
+        (if (re-find #"(?i)\blimit\s+\d+" qargs1)
+          q
+          (cons (str qargs1 " LIMIT 1") (rest q)))
+        (concat q [:limit 1])))))
 
 (defn insert! [ds dm ename changes opts])
 (defn update! [ds dm ename changes pred opts])

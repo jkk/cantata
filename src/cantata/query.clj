@@ -254,6 +254,9 @@
   (and (keyword? x)
        (= \? (.charAt ^String (name x) 0))))
 
+(defn param-name [x]
+  (keyword (subs (name x) 1)))
+
 (defn expand-wildcard
   "Expands a wildcard field into a sequence of all fields for the given
   entity."

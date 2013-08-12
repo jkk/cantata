@@ -118,11 +118,11 @@
 
 (defn query* [ds q & opts]
   (when (sql/plain-sql? q)
-    (throw-info "Use flat-query to run plain SQL queries" {:q q}))
+    (throw-info "Use flat-query to execute plain SQL queries" {:q q}))
   ;; TODO: implicitly add/remove PKs if necessary? :force-pk opt?
   (with-query-rows* ds q opts
     (fn [cols rows]
-            (nest cols rows))))
+      (nest cols rows))))
 
 (defn query1* [ds q & opts]
   (first
@@ -190,6 +190,9 @@
                                (force ds)))
            opts)))
 
+(defn prepare [ds q & opts]
+  (apply sql/prepare (force ds) (get-data-model ds) q opts))
+
 ;;;;
 
 (defmacro ^:private def-dm-helpers [& fn-names]
@@ -243,6 +246,10 @@
             m many-results))))))
 
 (defn query [ds q & opts]
+  (when (sql/plain-sql? q)
+    (throw-info "Use flat-query to execute plain SQL queries" {:q q}))
+  (when (sql/prepared? q)
+    (throw-info "Use query* or flat-query to execute prepared queries" {:q q}))
   (let [dm (get-data-model ds)
         [eq env] (cq/expand-query dm q :expand-joins false)
         ent (-> (env (:from eq)) :resolved :value)

@@ -9,3 +9,4 @@
 (defrecord ChainLink [from to from-path to-path rel])
 (defrecord ResolvedPath [final-path root chain resolved shortcuts])
 (defrecord AggOp [op path resolved-path])
+(defrecord PreparedQuery [expanded-query env sql param-names])
