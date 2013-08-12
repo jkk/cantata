@@ -102,7 +102,8 @@
     (fn [cols rows]
       (if vectors
         [cols (first rows)]
-        (cu/zip-ordered-map cols (first rows))))))
+        (when (first rows)
+          (cu/zip-ordered-map cols (first rows)))))))
 
 (defn query* [ds q & opts]
   (when (sql/plain-sql? q)
