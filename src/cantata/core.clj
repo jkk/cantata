@@ -144,10 +144,6 @@
 (defn query-count [ds q & opts]
   (apply sql/query-count (force ds) (get-data-model ds) q opts))
 
-(defn save! [ds dm ename changes opts])
-
-(defn delete! [ds dm ename pred opts])
-
 (defmacro with-transaction [binding & body]
   (let [[ds-sym ds] (if (symbol? binding)
                       [binding binding]
