@@ -249,6 +249,7 @@
 
 (defn ^:private fetch-many-results [ds ent pk npk ids many-groups opts]
   (for [[qual fields] many-groups]
+    ;; TODO: can be done with fewer joins by using reverse rels
     (let [q {:select (concat (remove (set fields) npk)
                              fields)
              :from (:name ent)
@@ -258,7 +259,7 @@
           maps (apply query* ds q opts)]
       [qual (into {} (for [m maps]
                        [(cdm/pk-val m pk)
-                        (m qual)]))])))
+                        (getf m qual)]))])))
 
 (defn ^:private incorporate-many-results [pk pk? npk maps many-results env sks]
   (let [rempk (remove (set sks) npk)]
@@ -273,9 +274,9 @@
             (fn [m [qual pk->rel-maps]]
               (let [id (cdm/pk-val m pk)
                     rel-maps (pk->rel-maps id)]
-                (assoc
+                (cq/nest-in
                   (if pk? m (apply dissoc m rempk))
-                  qual
+                  (cu/split-path qual)
                   rel-maps)))
             m many-results))))))
 

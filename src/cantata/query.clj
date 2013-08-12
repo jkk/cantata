@@ -610,7 +610,7 @@
       pops
       (recur (conj pops v) (pop v)))))
 
-(defn ^:private nest-in [m [k & ks] v]
+(defn nest-in [m [k & ks] v]
   (if ks
     (assoc m k [(nest-in {} ks v)])
     (assoc m k v)))
