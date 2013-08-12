@@ -31,7 +31,7 @@
 
 (defn pooled-data-source [db-spec & model+opts]
   (apply data-source
-         (sql/create-pool (normalize-db-spec db-spec))
+         (sql/create-pool (cds/normalize-db-spec db-spec))
          model+opts))
 
 (defn get-data-model [ds]
