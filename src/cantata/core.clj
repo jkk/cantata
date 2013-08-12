@@ -53,6 +53,9 @@
 (defn build-query [& qargs]
   (apply cq/build-query qargs))
 
+(defn merge-query [q & qargs]
+  (apply cq/build-query q qargs))
+
 (defn with-query-rows*
   ([ds q body-fn]
     (with-query-rows ds q nil body-fn))
@@ -80,8 +83,6 @@
 (defmacro with-query-maps [maps ds q & body]
   `(with-query-maps* ~ds ~q (fn [~maps]
                               ~@body)))
-
-;; TODO: helpers from modelo - getf, getf1, getc, merge-where, merge-select
 
 (defn get-query-env [x]
   (::query-env (meta x)))
@@ -204,6 +205,45 @@
 
 (def-dm-helpers
   entities entity rels rel fields field field-names shortcut shortcuts resolve-path)
+
+;;;;
+
+(defn getf
+  "Fetches one or more nested field values from the given query result or
+  results, traversing into related results as necessary.
+
+  If invoked with one argument, returns a partial that looks up the path."
+  ([path]
+    #(getf % path))
+  ([qr path]
+    (or
+      (path qr)
+      (let [ks (cu/split-path path)]
+        (reduce
+          (fn [maps k]
+            (if (sequential? maps)
+              (let [maps* (map k maps)]
+                (if (sequential? (first maps*))
+                  (apply concat maps*)
+                  maps*))
+              (k maps)))
+          qr
+          ks)))))
+
+(defn getf1
+  "Fetches a nested field value from the given query result or results,
+  traversing into related results as necessary. Returns the same as getf except
+  if the result would be a sequence, in which case it returns the first
+  element.
+
+  If invoked with one argument, returns a partial that looks up the path."
+  ([path]
+    #(getf1 % path))
+  ([qr path]
+    (let [ret (getf qr path)]
+      (if (sequential? ret)
+        (first ret)
+        ret))))
 
 ;;;;
 
