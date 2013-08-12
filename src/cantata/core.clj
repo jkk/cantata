@@ -87,6 +87,12 @@
       [cols rows]
       (mapv #(cu/zip-ordered-map cols %) rows))))
 
+(defn flat-query1 [ds q & {:keys [vectors]}]
+  (with-query-rows ds (sql/add-limit-1 q) cols rows
+    (if vectors
+      [cols (first rows)]
+      (cu/zip-ordered-map cols (first rows)))))
+
 (defn query* [ds q]
   (when (sql/plain-sql? q)
     (throw-info "Use flat-query to run plain SQL queries" {:q q}))
