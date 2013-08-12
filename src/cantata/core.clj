@@ -60,6 +60,15 @@
   `(with-query-rows* ~ds ~q (fn [~cols ~rows]
                               ~@body)))
 
+(defn with-query-maps* [ds q body-fn]
+  (sql/query (force ds) (get-data-model ds) q
+             (fn [cols rows]
+               (body-fn (map #(cu/zip-ordered-map cols %) rows)))))
+
+(defmacro with-query-maps [ds q maps & body]
+  `(with-query-maps* ~ds ~q (fn [~maps]
+                              ~@body)))
+
 ;; TODO: helpers from modelo - getf, getf1, getc, merge-where, merge-select
 
 (defn get-query-env [x]
