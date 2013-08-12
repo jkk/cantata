@@ -56,7 +56,7 @@
 (defn with-query-rows* [ds q body-fn]
   (sql/query (force ds) (get-data-model ds) q body-fn))
 
-(defmacro with-query-rows [ds q cols rows & body]
+(defmacro with-query-rows [cols rows ds q & body]
   `(with-query-rows* ~ds ~q (fn [~cols ~rows]
                               ~@body)))
 
@@ -65,7 +65,7 @@
              (fn [cols rows]
                (body-fn (map #(cu/zip-ordered-map cols %) rows)))))
 
-(defmacro with-query-maps [ds q maps & body]
+(defmacro with-query-maps [maps ds q & body]
   `(with-query-maps* ~ds ~q (fn [~maps]
                               ~@body)))
 
@@ -91,13 +91,13 @@
 ;;
 
 (defn flat-query [ds q & {:keys [vectors]}]
-  (with-query-rows ds q cols rows
+  (with-query-rows cols rows ds q
     (if vectors
       [cols rows]
       (mapv #(cu/zip-ordered-map cols %) rows))))
 
 (defn flat-query1 [ds q & {:keys [vectors]}]
-  (with-query-rows ds (sql/add-limit-1 q) cols rows
+  (with-query-rows cols rows ds (sql/add-limit-1 q)
     (if vectors
       [cols (first rows)]
       (cu/zip-ordered-map cols (first rows)))))
@@ -105,7 +105,7 @@
 (defn query* [ds q]
   (when (sql/plain-sql? q)
     (throw-info "Use flat-query to run plain SQL queries" {:q q}))
-  (with-query-rows ds q cols rows
+  (with-query-rows cols rows ds q
     ;; TODO: implicitly add/remove PKs if necessary? :force-pk opt?
     (nest cols rows)))
 
