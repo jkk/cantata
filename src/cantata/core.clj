@@ -269,13 +269,24 @@
                  :modifiers (when any-many? [:distinct]))]
     (apply query* ds q opts)))
 
+(defn ^:private build-pk-pred [pk id-or-ids]
+  (if (sequential? pk)
+    (if (sequential? (first id-or-ids))
+      (into [:or] (for [id id-or-ids]
+                    (into [:and] (for [[pk id] (map list pk id)]
+                                   [:= pk id]))))
+      [:= pk id-or-ids])
+    (if (sequential? id-or-ids)
+      [:in pk (vec id-or-ids)]
+      [:= pk id-or-ids])))
+
 (defn ^:private fetch-many-results [ds ent pk npk ids many-groups opts]
   (for [[qual fields] many-groups]
     ;; TODO: can be done with fewer joins by using reverse rels
     (let [q {:select (concat (remove (set fields) npk)
                              fields)
              :from (:name ent)
-             :where [:in pk ids]
+             :where (build-pk-pred pk ids)
              :modifiers [:distinct]
              :order-by pk}
           maps (apply query* ds q opts)]
@@ -360,7 +371,7 @@
 
 ;;;;
 
-(defn get-own-map
+(defn ^:private get-own-map
   "Returns a map with only the fields of the entity itself - no related
   fields."
   [ent m & {:as opts}]
@@ -403,7 +414,7 @@
   (let [dm (get-data-model ds)]
     (sql/delete! (force ds) dm ename pred)))
 
-(defn delete-by-id!
+(defn delete-ids!
   "Deletes records from data source that match the given ids.
 
   Returns the number of records deleted."
@@ -411,9 +422,11 @@
   (let [dm (get-data-model ds)
         ids (cu/seqify id-or-ids)
         ent (cdm/entity dm ename)]
-    (sql/delete! (force ds) dm ename [:in (:pk ent) ids])))
+    (sql/delete! (force ds) dm ename (build-pk-pred (:pk ent) ids))))
 
 ;;;;
+
+(declare save!)
 
 (defn ^:private save-m [ds ent m]
   (let [pk (:pk ent)
@@ -426,6 +439,116 @@
           (update! ds ename m [:= pk id])
           (insert! ds ename m))
         id))))
+
+(defn ^:private assoc-pk [m pk id]
+  (if (sequential? pk)
+    (reduce
+      (fn [m [pk id]]
+        (assoc m pk id))
+      (map list pk id))
+    (assoc m pk id)))
+
+(defn ^:private save-belongs-to [ds dm rel rms ent m]
+  (let [rent (cdm/entity dm (:ename rel))
+        rm (first rms) ;one-to-one
+        rpk (:pk rent)
+        nrpk (cdm/normalize-pk rpk)
+        rid (if (and (= (count nrpk) (count rm))
+                     (cdm/pk-present? rm rpk))
+              (cdm/pk-val rm rpk)
+              (save! ds (:name rent) rm))
+        pk (:pk ent)]
+    (assoc-pk m (:key rel) rid)))
+
+(defn ^:private save-has-many-via [ds dm rels rms ent id]
+  (let [[via-rel rel] rels
+        vent (cdm/entity dm (:ename via-rel))
+        rent (cdm/entity dm (:ename rel))
+        vfk (:other-key via-rel)
+        vrfk (:other-key rel)
+        old-vms (flat-query
+                  ds [:from (:name vent)
+                      :select vrfk
+                      :where (build-pk-pred vfk id)])
+        old-rids (map #(cdm/pk-val % vrfk) old-vms)
+        rids (doall
+              (for [rm rms]
+                (save! ds (:name rent) rm)))
+        rem-rids (remove (set rids) old-rids)
+        add-rids (remove (set old-rids) rids)]
+    (doseq [rid add-rids]
+      (save! ds (:name vent) (-> {}
+                               (assoc-pk vfk id)
+                               (assoc-pk vrfk rid))))
+    ;; Only recs in the junction table are removed; NOT from the rel table
+    (when (seq rem-rids)
+      (delete! ds (:name vent) (build-pk-pred
+                                 [vfk vrfk]
+                                 (map vector (repeat id) rem-rids))))
+    true))
+
+
+(defn ^:private save-has-many [ds dm rels rms ent id]
+  (if (< 1 (count rels))
+    (save-has-many-via ds dm rels rms ent id)
+    (let [rel (first rels)
+          rent (cdm/entity dm (:ename rel))
+          rpk (:pk rent)
+          fk (or (:other-key rel) rpk)
+          rename (:name rent)
+          old-rms (flat-query
+                    ds [:from rename :select rpk :where (build-pk-pred fk id)])
+          rids (doall
+                (for [rm rms]
+                  (save! ds (:name rent) (assoc-pk rm fk id))))
+          rem-rids (remove (set rids)
+                           (map #(cdm/pk-val % rpk) old-rms))]
+      (when (seq rem-rids)
+        (delete-ids! ds rename rem-rids))
+      true)))
+
+(defn ^:private rel-save-allowed? [chain]
+  ;; Must be a belongs-to or has-many relationship
+  (or (= 1 (count chain))
+      (and (= 2 (count chain))
+           (let [[l1 l2] chain]
+             (and (-> l1 :rel :reverse)
+                  (not (-> l2 :rel :reverse)))))))
+
+(defn ^:private get-rel-maps [dm ent m]
+  (let [rels (cdm/rels ent)]
+    (reduce-kv
+      (fn [rms k v]
+        (let [rp (cdm/resolve-path dm ent k)
+              chain (not-empty (:chain rp))]
+          (if-not chain
+            rms
+            (cond
+              (not (rel-save-allowed? chain))
+              (throw-info
+                ["Rel" k "not allowed here - saving entity" (:name ent)]
+                {:rname k :ename (:name ent)})
+              (not (sequential? v))
+              (throw-info
+                ["Rel value" k "must be sequential - saving entity" (:name ent)]
+                {:rname k :ename (:name ent)})
+              :else	(assoc rms (mapv :rel chain) v)))))
+      {} m)))
+
+(defn ^:private save-m-rels [ds dm ent own-m m]
+  (let [rel-ms (get-rel-maps dm ent m)
+        [fwd-rel-ms rev-rel-ms] ((juxt filter remove)
+                                  #(-> % key first :reverse not)
+                                  rel-ms)
+        own-m (reduce
+                (fn [own-m [[rel] rms]]
+                  (save-belongs-to ds dm rel rms ent own-m))
+                own-m
+                fwd-rel-ms)
+        id (save-m ds ent own-m)]
+    (doseq [[rels rms] rev-rel-ms]
+      (save-has-many ds dm rels rms ent id))
+    id))
 
 (defn save!
   "Saves entity map values to the database. If the primary key is included in
@@ -442,8 +565,8 @@
   [ds ename values & {:as opts}]
   (let [dm (get-data-model ds)
         ent (cdm/entity dm ename)
-        own-m (get-own-map entity values)]
+        own-m (get-own-map ent values)]
     (with-transaction ds
-      (save-m ds ent own-m)
-      (when-not (false? (:save-rels opts))
-        ))))
+      (if (false? (:save-rels opts))
+        (save-m ds ent own-m)
+        (save-m-rels ds dm ent own-m values)))))
