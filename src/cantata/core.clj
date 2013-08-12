@@ -60,7 +60,7 @@
   `(with-query-rows* ~ds ~q (fn [~cols ~rows]
                               ~@body)))
 
-;; TODO: helpers from modelo - field, field1, col1, merge-where, merge-select
+;; TODO: helpers from modelo - getf, getf1, getc, merge-where, merge-select
 
 (defn get-query-env [x]
   (::query-env (meta x)))
@@ -77,33 +77,26 @@
 ;; QUERY CHOICES
 ;; * As nested maps, multiple queries - (query ...)
 ;; * As nested maps, single query     - (query* ...)
-;; * As flat maps, single query       - (query* ... :flat true)
-;; * As vectors, single query         - (query* ... :vectors true)
+;; * As flat maps, single query       - (flat-query ... :flat true)
+;; * As vectors, single query         - (flat-query ... :vectors true)
 ;;
 
-(defn query* [ds q & {:keys [vectors flat]}]
+(defn flat-query [ds q & {:keys [vectors]}]
   (with-query-rows ds q cols rows
-    (cond
-      vectors [cols rows]
-      (or flat (sql/plain-sql? q)) (mapv #(cu/zip-ordered-map cols %) rows)
-      ;; TODO: implicitly add/remove PKs if necessary? :force-pk opt?
-      :else (nest cols rows))))
+    (if vectors
+      [cols rows]
+      (mapv #(cu/zip-ordered-map cols %) rows))))
+
+(defn query* [ds q]
+  (when (sql/plain-sql? q)
+    (throw-info "Use flat-query to run plain SQL queries" {:q q}))
+  (with-query-rows ds q cols rows
+    ;; TODO: implicitly add/remove PKs if necessary? :force-pk opt?
+    (nest cols rows)))
 
 (defn query1* [ds q & opts]
-  (let [ret (apply query* ds (sql/add-limit-1 q) opts)]
-    (if (vector? (first ret))
-      [(first ret) (first (second ret))]
-      (first ret))))
-
-
-(defn query [ds q]
-  (with-query-rows ds q cols rows
-    ;; TODO
-    ))
-
-(defn query1 [ds q]
   (first
-    (query ds q)))
+    (query* ds (sql/add-limit-1 q))))
 
 (defn by-id [ds ename id & [q]]
   (let [ent (cdm/entity (get-data-model ds) ename)
