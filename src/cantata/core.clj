@@ -104,14 +104,28 @@
   (first
     (query* ds (sql/add-limit-1 q))))
 
+(declare query)
+
+(defn query1 [ds q]
+  (first
+    (query ds (sql/add-limit-1 q))))
+
+(defn ^:private build-by-id-query [ds ename id]
+  (let [ent (cdm/entity (get-data-model ds) ename)]
+    {:from ename :where [:= id (:pk ent)]}))
+
 (defn by-id [ds ename id & [q]]
-  (let [ent (cdm/entity (get-data-model ds) ename)
-        baseq {:from ename :where [:= id (:pk ent)]}]
-    (first
-      ;; TODO: use query?
-      (query* ds (if (map? q)
+  (let [baseq (build-by-id-query ds ename id)]
+    (query1 ds (if (map? q)
                  [baseq q]
-                 (cons baseq q))))))
+                 (cons baseq q)))))
+
+(defn by-id* [ds ename id & [q]]
+  (let [baseq (build-by-id-query ds ename id)]
+    (first
+      (query* ds (if (map? q)
+                   [baseq q]
+                   (cons baseq q))))))
 
 (defn query-count [ds q & {:keys [flat]}]
   (sql/query-count (force ds) (get-data-model ds) q :flat flat))
@@ -161,4 +175,96 @@
 
 (def-dm-helpers
   entities entity rels rel fields field field-names shortcut shortcuts resolve-path)
+
+;;;;
+
+(defn ^:private fetch-one-maps [ds eq fields any-many?]
+  (let [q (assoc eq
+                 :select fields
+                 :modifiers (when any-many? [:distinct]))]
+    (query* ds q)))
+
+(defn ^:private fetch-many-results [ds ent pk npk ids many-groups]
+  (for [[qual fields] many-groups]
+    (let [maps (query* ds
+                       {:select (concat (remove (set fields) npk)
+                                        fields)
+                        :from (:name ent)
+                        :where [:in pk ids]
+                        :modifiers [:distinct]
+                        :order-by pk})]
+      [qual (into {} (for [m maps]
+                       [(cdm/pk-val m pk)
+                        (m qual)]))])))
+
+(defn ^:private incorporate-many-results [pk pk? npk maps many-results env sks]
+  (let [rempk (remove (set sks) npk)]
+    (into
+      []
+      (if (empty? many-results)
+        (if pk?
+          maps
+          (mapv #(apply dissoc % rempk) maps))
+        (for [m maps]
+          (reduce
+            (fn [m [qual pk->rel-maps]]
+              (let [id (cdm/pk-val m pk)
+                    rel-maps (pk->rel-maps id)]
+                (assoc
+                  (if pk? m (apply dissoc m rempk))
+                  qual
+                  rel-maps)))
+            m many-results))))))
+
+(defn query [ds q]
+  (let [dm (get-data-model ds)
+        [eq env] (cq/expand-query dm q :expand-joins false)
+        ent (-> (env (:from eq)) :resolved :value)
+        pk (:pk ent)
+        all-fields (filter #(= :field (-> % env :resolved :type))
+                           (keys env))
+        has-many? (comp #(some (comp :reverse :rel) %) :chain env)
+        any-many? (boolean (seq (filter has-many? all-fields)))
+        [many-fields one-fields] ((juxt filter remove)
+                                  has-many?
+                                  (:select eq))
+        many-rel-names (set (map cu/qualifier
+                                 many-fields))
+        select-paths (map (comp :final-path env) (:select eq))
+        [many-fields one-fields] ((juxt filter remove)
+                                   (comp many-rel-names cu/qualifier)
+                                   select-paths)
+        pk? (cdm/pk-present? select-paths pk)
+        npk (cdm/normalize-pk pk)
+        one-fields (if pk?
+                     one-fields
+                     (concat (remove (set one-fields) npk)
+                             one-fields))]
+    ;; TODO: provide way to specify :group-by
+    (when (and (seq many-fields)
+              (or (:group-by eq)
+                  (some #(= :agg-op (-> % env :resolved :type))
+                        many-fields)))
+     (throw-info
+       "Multi-queries do not support aggregates or group-by for to-many-related fields"
+       {:q q}))
+    (let [maps (fetch-one-maps ds eq one-fields any-many?)
+          maps (if-not any-many?
+                 (if pk?
+                   maps
+                   (let [rempk (remove (set select-paths) npk)]
+                     (mapv #(apply dissoc % rempk) maps)))
+                 (let [ids (mapv #(cdm/pk-val % pk) maps)
+                       many-groups (group-by cu/qualifier
+                                             many-fields)
+                       many-results (when (seq maps)
+                                      (fetch-many-results
+                                        ds ent pk npk ids many-groups))]
+                   (incorporate-many-results
+                     pk pk? npk maps many-results env select-paths)))]
+    (with-meta
+      maps
+      {::query-from ent
+       ::query-env env
+       ::query-select (:select eq)}))))
 
