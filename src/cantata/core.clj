@@ -294,7 +294,7 @@
                        [(cdm/pk-val m pk)
                         (getf m qual)]))])))
 
-(defn ^:private incorporate-many-results [pk pk? npk maps many-results env sks]
+(defn ^:private incorporate-many-results [pk pk? npk maps many-results sks]
   (let [rempk (remove (set sks) npk)]
     (into
       []
@@ -362,7 +362,7 @@
                                       (fetch-many-results
                                         ds ent pk npk ids many-groups opts))]
                    (incorporate-many-results
-                     pk pk? npk maps many-results env select-paths)))]
+                     pk pk? npk maps many-results select-paths)))]
     (with-meta
       maps
       {::query-from ent
