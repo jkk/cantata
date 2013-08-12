@@ -287,9 +287,64 @@
           (cons (str qargs1 " LIMIT 1") (rest q)))
         (concat q [:limit 1])))))
 
-(defn insert! [ds dm ename changes opts])
-(defn update! [ds dm ename changes pred opts])
-(defn delete! [ds dm ename pred opts])
+(defn ^:private get-return-key [ret]
+  (:generated_key ret ((keyword "scope_identity()") ret))) ;H2 hack
+
+(defn qualify-values-map [m quoting env]
+  (into {} (for [[k v] m]
+             [(hq/quote-identifier (get-in (env k) [:resolved :value :db-name] k)
+                                   :style quoting)
+              v])))
+
+(defn insert!
+  [ds dm ename maps & {:as opts}]
+  (let [ent (cdm/entity dm ename)
+        fnames (cdm/field-names ent)
+        no-fields? (empty? fnames)
+        env (zipmap fnames (map #(cdm/resolve-path dm ent % :lax no-fields?)
+                                fnames))
+        quoting (detect-quoting ds)
+        maps* (map #(qualify-values-map % quoting env) maps)
+        table (hq/quote-identifier (:db-name ent)
+                                   :style quoting)
+        ret (apply jd/insert! ds table maps*)]
+    (map get-return-key ret)))
+
+(defn update!
+  [ds dm ename values pred & {:as opts}]
+  (let [ent (cdm/entity dm ename)
+        fnames (cdm/field-names ent)
+        no-fields? (empty? fnames)
+        env (zipmap fnames (map #(cdm/resolve-path dm ent % :lax no-fields?)
+                                fnames))
+        quoting (detect-quoting ds)
+        values* (qualify-values-map values quoting env)
+        table {(hq/quote-identifier (:db-name ent)
+                                    :style quoting)
+               (hq/quote-identifier ename :style quoting)}
+        ;; TODO: joins
+        pred* (-> pred
+                (qualify-pred-fields quoting env)
+                (hq/format-predicate :quoting quoting))]
+    (first
+      (jd/update! ds table values* pred*))))
+
+(defn delete! [ds dm ename pred & {:as opts}]
+  (let [ent (cdm/entity dm ename)
+        fnames (cdm/field-names ent)
+        no-fields? (empty? fnames)
+        env (zipmap fnames (map #(cdm/resolve-path dm ent % :lax no-fields?)
+                                fnames))
+        quoting (detect-quoting ds)
+        table {(hq/quote-identifier (:db-name ent)
+                                    :style quoting)
+               (hq/quote-identifier ename :style quoting)}
+        ;; TODO: joins
+        pred* (-> pred
+                (qualify-pred-fields quoting env)
+                (hq/format-predicate :quoting quoting))]
+    (first
+      (jd/delete! ds table pred*))))
 
 ;; TODO: more customizable options
 (defn create-pool [spec]

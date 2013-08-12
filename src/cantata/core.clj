@@ -341,3 +341,54 @@
        ::query-env env
        ::query-select (:select eq)}))))
 
+;;;;
+
+(defn get-own-map
+  "Returns a map with only the fields of the entity itself - no related
+  fields."
+  [ent m & {:as opts}]
+  (select-keys m (cdm/field-names ent)))
+
+(defn insert!
+  "Inserts an entity map or maps into the data source. Unlike save, the
+  maps may not include related entity maps.
+
+  Returns the primary key(s) of the inserted maps."
+  [ds ename m-or-ms & {:as opts}]
+  (let [ms (cu/seqify m-or-ms)
+        dm (get-data-model ds)
+        ent (cdm/entity dm ename)
+        ret-keys (sql/insert! (force ds) dm ename
+                              (map #(get-own-map ent %) ms))]
+    (if (sequential? m-or-ms)
+       ret-keys
+       (first ret-keys))))
+
+(defn update!
+  "Updates data source records that match the given predicate with the given
+  values. Unlike save, no related field values can be included.
+
+  Returns the number of records affected by the update."
+  [ds ename values pred & {:as opts}]
+  (let [dm (get-data-model ds)
+        ent (cdm/entity dm ename)
+        values* (get-own-map ent values)]
+    (sql/update! (force ds) dm ename values pred)))
+
+(defn delete!
+  "Deletes records from data source that match the given predicate.
+
+  Returns the number of records deleted."
+  [ds ename pred & {:as opts}]
+  (let [dm (get-data-model ds)]
+    (sql/delete! (force ds) dm ename pred)))
+
+(defn delete-by-id!
+  "Deletes records from data source that match the given ids.
+
+  Returns the number of records deleted."
+  [ds ename id-or-ids & {:as opts}]
+  (let [dm (get-data-model ds)
+        ids (cu/seqify id-or-ids)
+        ent (cdm/entity dm ename)]
+    (sql/delete! (force ds) dm ename [:in (:pk ent) ids])))
