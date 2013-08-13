@@ -260,9 +260,11 @@
     (let [pk (if (sequential? pk)
                (first pk)
                pk)]
-      (if (sequential? id-or-ids)
+      (if (and (sequential? id-or-ids) (< 1 (count id-or-ids)))
         [:in pk (vec id-or-ids)]
-        [:= pk id-or-ids]))))
+        [:= pk (if (sequential? id-or-ids)
+                 (first id-or-ids)
+                 id-or-ids)]))))
 
 (defn ^:private fetch-many-results [ds ent pk npk ids many-groups opts]
   (for [[qual fields] many-groups]
@@ -441,9 +443,9 @@
       (let [dep-ent (cdm/entity dm dep-name)
             dep-pk (:pk dep-ent)
             other-rk (vec (for [k (cdm/normalize-pk (:other-key dep-rel))]
-                            (cu/join-path (:name rel) k)))
+                            (cu/join-path (:name dep-rel) k)))
             other-pk (vec (for [k npk]
-                            (cu/join-path (:name rel) k)))
+                            (cu/join-path (:name dep-rel) k)))
             del-ms (flat-query
                      ds [:from dep-name
                          :select (cdm/normalize-pk dep-pk)
