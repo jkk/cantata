@@ -224,6 +224,7 @@
         _ (when cu/*verbose* (prn sql-params))
         [cols & rows] (jd/query ds sql-params
                                 :identifiers dasherize
+                                :row-fn (cds/get-row-unmarshaller ds)
                                 :as-arrays? true)
         qmeta {:cantata.core/query-from (cdm/entity dm (:from eq))
                :cantata.core/query-env env}]
@@ -267,11 +268,13 @@
 (defn ^:private get-return-key [ret]
   (:generated_key ret ((keyword "scope_identity()") ret))) ;H2 hack
 
-(defn qualify-values-map [m quoting env]
+(defn qualify-values-map [m quoting env marshaller]
   (into {} (for [[k v] m]
              [(hq/quote-identifier (get-in (env k) [:resolved :value :db-name] k)
                                    :style quoting)
-              v])))
+              (if marshaller
+                (marshaller v)
+                v)])))
 
 (defn insert!
   [ds dm ename maps & {:as opts}]
@@ -281,7 +284,8 @@
         env (zipmap fnames (map #(cdm/resolve-path dm ent % :lax no-fields?)
                                 fnames))
         quoting (cds/get-quoting ds)
-        maps* (map #(qualify-values-map % quoting env) maps)
+        marshaller (cds/get-marshaller ds)
+        maps* (map #(qualify-values-map % quoting env marshaller) maps)
         table (hq/quote-identifier (:db-name ent)
                                    :style quoting)
         ret (apply jd/insert! ds table maps*)]
@@ -295,7 +299,8 @@
         env (zipmap fnames (map #(cdm/resolve-path dm ent % :lax no-fields?)
                                 fnames))
         quoting (cds/get-quoting ds)
-        values* (qualify-values-map values quoting env)
+        marshaller (cds/get-marshaller ds)
+        values* (qualify-values-map values quoting env marshaller)
         table {(hq/quote-identifier (:db-name ent)
                                     :style quoting)
                (hq/quote-identifier ename :style quoting)}
