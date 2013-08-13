@@ -536,7 +536,7 @@
                  (throw-info "No :from found in query" {:q q}))
         ent (dm/entity dm from)
         _ (when-not (and ent (dm/entity? ent))
-            (throw-info ["Invalid :from -" from] {:q q}))
+            (throw-info ["Unrecognized :from -" from] {:q q}))
         q (if (:from q) q (assoc q :from from))
         env (merge {(:name ent) (dm/resolve-path dm ent (:name ent))}
                    (get-query-env dm ent q env))
