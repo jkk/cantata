@@ -254,6 +254,20 @@
         (first ret)
         ret))))
 
+(defn queryf [ds q & opts]
+  (let [res (apply flat-query ds q opts)
+        env (get-query-env res)
+        eq (get-query-expanded res)
+        f1name (:final-path (env (first (:select eq))))]
+    (map f1name res)))
+
+(defn queryf1 [ds q & opts]
+  (let [res (apply flat-query1 ds q opts)
+        env (get-query-env res)
+        eq (get-query-expanded res)
+        f1name (:final-path (env (first (:select eq))))]
+    (f1name res)))
+
 ;;;;
 
 (defn ^:private fetch-one-maps [ds eq fields any-many? opts]
