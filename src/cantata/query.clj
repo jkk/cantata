@@ -264,7 +264,7 @@
   entity."
   [dm ent env field]
   (let [path (first (cu/unqualify field))
-        rent (-> (resolve-path dm ent env path) :resolved :value)]
+        rent (-> (env path) :resolved :value)]
     (if (or (not rent) (empty? (dm/field-names rent)))
       [field]
       (map #(cu/join-path path %)
@@ -273,10 +273,12 @@
 (defn expand-wildcards [dm ent fields env]
   (mapcat (fn [field]
             (cond
-             (= :* field) (or (seq (dm/field-names ent))
-                              [(keyword (str (name (:name ent)) ".*"))])
-             (wildcard? field) (expand-wildcard dm ent env field)
-             :else [field]))
+              (identical? :* field) (or (seq (dm/field-names ent))
+                                        (cu/join-path (:name ent) :*))
+              (wildcard? field) (expand-wildcard dm ent env field)
+              (= :entity (-> env field :resolved :type)) (expand-wildcard
+                                                           dm ent env (cu/join-path field :*))
+              :else [field]))
           fields))
 
 (def join-clauses [:join :left-join :right-join])
@@ -489,7 +491,7 @@
       (apply dm/resolve-path dm ent path opts))))
 
 (defn ^:private resolve-and-add-path [dm ent env path & opts]
-  (if (env path)
+  (if (or (env path) (wildcard? path) (identical? :* path))
     env
     (if-let [rp (apply resolve-path dm ent env path opts)]
       (let [env (assoc env path rp)
@@ -554,6 +556,7 @@
         q (if (:without q)
             (expand-without q env)
             q)
+        env (resolve-and-add-paths dm ent env (:select q))
         q (assoc q :select (vec (expand-wildcards dm ent (:select q) env)))
         env (resolve-and-add-paths dm ent env (get-all-fields q))
         [q env] (if (false? expand-joins)
