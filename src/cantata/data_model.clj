@@ -355,3 +355,54 @@
                             {:rel rel :entity ent})))))))
   dm)
 
+;;;;
+
+(defn dependency-graph
+  "Returns a map of entity names to names of entities on which they depend"
+  [dm]
+  (let [ents (entities dm)]
+    (reduce
+      (fn [g [ent rel]]
+        (let [rel-ent (entity dm (:ename rel))]
+          (update-in g [(:name ent)]
+                     conj (:name rel-ent))))
+      (into {} (zipmap (map :name ents) (repeat #{})))
+      (for [ent ents
+            rel (rels ent)
+            :when (not (:reverse rel))]
+        [ent rel]))))
+
+(defn sort-entities
+  "Does a topological sort of all entities and returns the their names"
+  [dm]
+  (let [deps (dependency-graph dm)]
+    (loop [deps deps
+           s #{}
+           ret []]
+      (if (empty? deps)
+        ret
+        (if-let [ename (ffirst
+                         (filter
+                           (fn [[ename depnames]]
+                             (empty? (remove s depnames)))
+                           deps))]
+          (recur (dissoc deps ename)
+                 (conj s ename)
+                 (conj ret ename))
+          (throw-info
+            "Circular dependency detected" {:deps deps :seen s}))))))
+
+(defn dependent-graph
+  "Returns a map of entity names to a set of vectors [dependent-name rel]"
+  [dm]
+  (let [ents (entities dm)]
+    (reduce
+      (fn [g [ent rel]]
+        (let [rel-ent (entity dm (:ename rel))]
+          (update-in g [(:name rel-ent)]
+                     conj [(:name ent) rel])))
+      (into {} (zipmap (map :name ents) (repeat #{})))
+      (for [ent ents
+            rel (rels ent)
+            :when (not (:reverse rel))]
+        [ent rel]))))

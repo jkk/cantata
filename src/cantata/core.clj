@@ -250,16 +250,19 @@
                  :modifiers (when any-many? [:distinct]))]
     (apply query* ds q opts)))
 
-(defn ^:private build-pk-pred [pk id-or-ids]
-  (if (sequential? pk)
+(defn ^:private build-key-pred [pk id-or-ids]
+  (if (and (sequential? pk) (< 1 (count pk)))
     (if (sequential? (first id-or-ids))
       (into [:or] (for [id id-or-ids]
                     (into [:and] (for [[pk id] (map list pk id)]
                                    [:= pk id]))))
       [:= pk id-or-ids])
-    (if (sequential? id-or-ids)
-      [:in pk (vec id-or-ids)]
-      [:= pk id-or-ids])))
+    (let [pk (if (sequential? pk)
+               (first pk)
+               pk)]
+      (if (sequential? id-or-ids)
+        [:in pk (vec id-or-ids)]
+        [:= pk id-or-ids]))))
 
 (defn ^:private fetch-many-results [ds ent pk npk ids many-groups opts]
   (for [[qual fields] many-groups]
@@ -267,7 +270,7 @@
     (let [q {:select (concat (remove (set fields) npk)
                              fields)
              :from (:name ent)
-             :where (build-pk-pred pk ids)
+             :where (build-key-pred pk ids)
              :modifiers [:distinct]
              :order-by pk}
           maps (apply query* ds q opts)]
@@ -403,7 +406,33 @@
   (let [dm (cds/get-data-model ds)
         ids (cu/seqify id-or-ids)
         ent (cdm/entity dm ename)]
-    (sql/delete! (force ds) dm ename (build-pk-pred (:pk ent) ids))))
+    (sql/delete! (force ds) dm ename (build-key-pred (:pk ent) ids))))
+
+(defn cascading-delete-ids!
+  "Deletes any dependent records and then deletes the entity record for the
+  given id"
+  [ds ename id-or-ids]
+  (let [dm (cds/get-data-model ds)
+        ent (cdm/entity dm ename)
+        pk (:pk ent)
+        npk (cdm/normalize-pk pk)
+        deps (cdm/dependent-graph dm)]
+    (doseq [[dep-name dep-rel] (deps ename)]
+      (let [dep-ent (cdm/entity dm dep-name)
+            dep-pk (:pk dep-ent)
+            other-rk (vec (for [k (cdm/normalize-pk (:other-key dep-rel))]
+                            (cu/join-path (:name rel) k)))
+            other-pk (vec (for [k npk]
+                            (cu/join-path (:name rel) k)))
+            del-ms (flat-query
+                     ds [:from dep-name
+                         :select (cdm/normalize-pk dep-pk)
+                         :where [:and
+                                 (build-key-pred (:key dep-rel) other-rk)
+                                 (build-key-pred other-pk id-or-ids)]])]
+        (doseq [del-m del-ms]
+          (cascading-delete-ids! ds dep-name (cdm/pk-val del-m dep-pk))))))
+  (delete-ids! ds ename id-or-ids))
 
 ;;;;
 
@@ -450,7 +479,7 @@
         old-vms (flat-query
                   ds [:from (:name vent)
                       :select vrfk
-                      :where (build-pk-pred vfk id)])
+                      :where (build-key-pred vfk id)])
         old-rids (map #(cdm/pk-val % vrfk) old-vms)
         rids (doall
               (for [rm rms]
@@ -463,7 +492,7 @@
                                (assoc-pk vrfk rid))))
     ;; Only recs in the junction table are removed; NOT from the rel table
     (when (seq rem-rids)
-      (delete! ds (:name vent) (build-pk-pred
+      (delete! ds (:name vent) (build-key-pred
                                  [vfk vrfk]
                                  (map vector (repeat id) rem-rids))))
     true))
@@ -478,7 +507,7 @@
           fk (or (:other-key rel) rpk)
           rename (:name rent)
           old-rms (flat-query
-                    ds [:from rename :select rpk :where (build-pk-pred fk id)])
+                    ds [:from rename :select rpk :where (build-key-pred fk id)])
           rids (doall
                 (for [rm rms]
                   (save! ds (:name rent) (assoc-pk rm fk id))))
