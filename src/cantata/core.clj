@@ -177,7 +177,7 @@
                    jd/db-do-prepared-return-keys sql/db-do-prepared-return-keys-hook]
        ~@body)))
 
-(defmacro debug
+(defmacro with-debug
   "Starts a transaction which will be rolled back when it ends, and prints
   verbose information about all database activity.
 
