@@ -257,25 +257,25 @@
 (defn param-name [x]
   (keyword (subs (name x) 1)))
 
+(declare resolve-path)
+
 (defn expand-wildcard
   "Expands a wildcard field into a sequence of all fields for the given
   entity."
-  [dm env field]
-  (let [path (-> (name field)
-               (string/replace #"\.\*$" "")
-               keyword)
-        rent (-> (env path) :resolved :value)]
+  [dm ent env field]
+  (let [path (first (cu/unqualify field))
+        rent (-> (resolve-path dm ent env path) :resolved :value)]
     (if (or (not rent) (empty? (dm/field-names rent)))
       [field]
       (map #(cu/join-path path %)
            (dm/field-names rent)))))
 
-(defn expand-wildcards [dm entity fields env]
+(defn expand-wildcards [dm ent fields env]
   (mapcat (fn [field]
             (cond
-             (= :* field) (or (seq (dm/field-names entity))
-                              [(keyword (str (name (:name entity)) ".*"))])
-             (wildcard? field) (expand-wildcard dm env field)
+             (= :* field) (or (seq (dm/field-names ent))
+                              [(keyword (str (name (:name ent)) ".*"))])
+             (wildcard? field) (expand-wildcard dm ent env field)
              :else [field]))
           fields))
 
