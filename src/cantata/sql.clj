@@ -311,22 +311,26 @@
     (first
       (jd/update! ds table values* pred*))))
 
-(defn delete! [ds dm ename pred & {:as opts}]
-  (let [ent (cdm/entity dm ename)
-        fnames (cdm/field-names ent)
-        no-fields? (empty? fnames)
-        env (zipmap fnames (map #(cdm/resolve-path dm ent % :lax no-fields?)
-                                fnames))
-        quoting (cds/get-quoting ds)
-        table {(hq/quote-identifier (:db-name ent)
-                                    :style quoting)
-               (hq/quote-identifier ename :style quoting)}
-        ;; TODO: joins
-        pred* (-> pred
-                (qualify-pred-fields quoting env)
-                (hq/format-predicate :quoting quoting))]
-    (first
-      (jd/delete! ds table pred*))))
+(defn delete!
+  ([ds dm ename]
+    (delete! ds dm ename nil))
+  ([ds dm ename pred & {:as opts}]
+    (let [ent (cdm/entity dm ename)
+          fnames (cdm/field-names ent)
+          no-fields? (empty? fnames)
+          env (zipmap fnames (map #(cdm/resolve-path dm ent % :lax no-fields?)
+                                  fnames))
+          quoting (cds/get-quoting ds)
+          table {(hq/quote-identifier (:db-name ent)
+                                      :style quoting)
+                 (hq/quote-identifier ename :style quoting)}
+          ;; TODO: joins
+          pred* (when pred
+                  (-> pred
+                    (qualify-pred-fields quoting env)
+                    (hq/format-predicate :quoting quoting)))]
+      (first
+        (jd/delete! ds table pred*)))))
 
 ;;;;
 

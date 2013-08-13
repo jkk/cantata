@@ -391,12 +391,32 @@
     (sql/update! (force ds) dm ename values pred)))
 
 (defn delete!
-  "Deletes records from data source that match the given predicate.
+  "Deletes records from data source that match the given predicate, or all
+  records if no predicate is provided.
 
   Returns the number of records deleted."
-  [ds ename pred & {:as opts}]
-  (let [dm (cds/get-data-model ds)]
-    (sql/delete! (force ds) dm ename pred)))
+  ([ds ename]
+    (delete! ds ename nil))
+  ([ds ename pred & {:as opts}]
+    (let [dm (cds/get-data-model ds)]
+      (sql/delete! (force ds) dm ename pred))))
+
+(defn cascading-delete!
+  "Deletes ALL database records for an entity, and ALL dependent records. Or,
+  if no entity is given, deletes ALL records for ALL entities in the data
+  model. BE CAREFUL!"
+  ([ds]
+    (let [dm (cds/get-data-model ds)]
+      ;; Doesn't keep track of which have already been deleted, so will
+      ;; delete entities multiple times. Oh well.
+      (doseq [ent (cdm/entities dm)]
+        (cascading-delete! ds (:name ent)))))
+  ([ds ename]
+    (let [dm (cds/get-data-model ds)
+          deps (cdm/dependent-graph dm)]
+      (doseq [[dep-name] (deps ename)]
+        (cascading-delete! ds dep-name))
+      (delete! ds ename))))
 
 (defn delete-ids!
   "Deletes records from data source that match the given ids.
