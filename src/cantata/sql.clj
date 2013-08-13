@@ -227,7 +227,8 @@
                                 :row-fn (cds/get-row-unmarshaller ds)
                                 :as-arrays? true)
         qmeta {:cantata.core/query-from (cdm/entity dm (:from eq))
-               :cantata.core/query-env env}]
+               :cantata.core/query-env env
+               :cantata.core/query-expanded eq}]
     (callback (with-meta cols qmeta)
               rows)))
 

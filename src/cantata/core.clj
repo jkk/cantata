@@ -59,10 +59,15 @@
 (defn get-query-from [x]
   (::query-from (meta x)))
 
+(defn get-query-expanded [x]
+  (::query-expanded (meta x)))
+
 ;; TODO: version that works on arbitrary vector/map data, sans env
 (defn nest
   ([cols rows]
-    (cq/nest cols rows (get-query-from cols) (get-query-env cols))))
+    (with-meta
+      (cq/nest cols rows (get-query-from cols) (get-query-env cols))
+      (meta cols))))
 
 ;;
 ;; QUERY CHOICES
@@ -77,7 +82,9 @@
     (fn [cols rows]
       (if vectors
         [cols rows]
-        (mapv #(cu/zip-ordered-map cols %) rows)))))
+        (with-meta
+          (mapv #(cu/zip-ordered-map cols %) rows)
+          (meta cols))))))
 
 (defn flat-query1 [ds q & {:keys [vectors] :as opts}]
   (with-query-rows* ds (sql/add-limit-1 q) opts
@@ -85,7 +92,9 @@
       (if vectors
         [cols (first rows)]
         (when (first rows)
-          (cu/zip-ordered-map cols (first rows)))))))
+          (with-meta
+            (cu/zip-ordered-map cols (first rows))
+            (meta cols)))))))
 
 (defn query* [ds q & opts]
   (when (sql/plain-sql? q)
@@ -96,14 +105,16 @@
       (nest cols rows))))
 
 (defn query1* [ds q & opts]
-  (first
-    (apply query* ds (sql/add-limit-1 q) opts)))
+  (let [ms (apply query* ds (sql/add-limit-1 q) opts)]
+    (when-let [m (first ms)]
+      (with-meta m (meta ms)))))
 
 (declare query)
 
 (defn query1 [ds q & opts]
-  (first
-    (apply query ds (sql/add-limit-1 q) opts)))
+  (let [ms (apply query ds (sql/add-limit-1 q) opts)]
+    (when-let [m (first ms)]
+      (with-meta m (meta ms)))))
 
 (defn ^:private build-by-id-query [ds ename id]
   (let [ent (cdm/entity (cds/get-data-model ds) ename)]
@@ -117,12 +128,13 @@
            opts)))
 
 (defn by-id* [ds ename id & [q & opts]]
-  (let [baseq (build-by-id-query ds ename id)]
-    (first
-      (apply query* ds (if (map? q)
-                         [baseq q]
-                         (cons baseq q))
-             opts))))
+  (let [baseq (build-by-id-query ds ename id)
+        ms (apply query* ds (if (map? q)
+                              [baseq q]
+                              (cons baseq q))
+                  opts)]
+    (when-let [m (first ms)]
+      (with-meta m (meta ms)))))
 
 (defn query-count [ds q & opts]
   (apply sql/query-count (force ds) (cds/get-data-model ds) q opts))
@@ -353,7 +365,7 @@
       maps
       {::query-from ent
        ::query-env env
-       ::query-select (:select eq)}))))
+       ::query-expanded eq}))))
 
 ;;;;
 
