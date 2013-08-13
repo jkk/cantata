@@ -341,7 +341,7 @@
         [many-fields one-fields] ((juxt filter remove)
                                   has-many?
                                   (:select eq))
-        many-rel-names (set (map cu/qualifier
+        many-rel-names (set (map (comp cu/qualifier :final-path env)
                                  many-fields))
         select-paths (map (comp :final-path env) (:select eq))
         [many-fields one-fields] ((juxt filter remove)
