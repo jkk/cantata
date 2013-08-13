@@ -201,7 +201,7 @@
 
 (defn rels
   ([ent]
-    (vals (:rels ent)))
+    (remove nil? (vals (:rels ent))))
   ([dm ename]
     (rels (entity dm ename))))
 
