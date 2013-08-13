@@ -14,28 +14,10 @@
   (cdm/reflect-data-model (force ds) entity-specs))
 
 (defn data-source [db-spec & model+opts]
-  (let [arg1 (first model+opts)
-        [dm opts] (if (keyword? arg1)
-                    [nil model+opts]
-                    [arg1 (rest model+opts)])
-        opts (apply hash-map opts)
-        dm (if (:reflect opts)
-             (reflect-data-model db-spec dm)
-             (when dm
-               (if (cdm/data-model? dm)
-                 dm
-                 (data-model dm))))]
-    (cond-> (cds/normalize-db-spec db-spec)
-            dm (assoc ::data-model dm)
-            (contains? opts :quoting) (assoc ::quoting (:quoting opts)))))
+  (apply cds/data-source db-spec model+opts))
 
 (defn pooled-data-source [db-spec & model+opts]
-  (apply data-source
-         (sql/create-pool (cds/normalize-db-spec db-spec))
-         model+opts))
-
-(defn get-data-model [ds]
-  (::data-model (force ds)))
+  (apply cds/pooled-data-source db-spec model+opts))
 
 (defn build-query [& qargs]
   (apply cq/build-query qargs))
@@ -47,7 +29,7 @@
   ([ds q body-fn]
     (with-query-rows* ds q nil body-fn))
   ([ds q opts body-fn]
-    (apply sql/query (force ds) (get-data-model ds) q body-fn
+    (apply sql/query (force ds) (cds/get-data-model ds) q body-fn
            (if (map? opts)
              (apply concat opts)
              opts))))
@@ -60,7 +42,7 @@
   ([ds q body-fn]
     (with-query-maps* ds q nil body-fn))
   ([ds q opts body-fn]
-    (apply sql/query (force ds) (get-data-model ds) q
+    (apply sql/query (force ds) (cds/get-data-model ds) q
            (fn [cols rows]
              (body-fn (map #(cu/zip-ordered-map cols %) rows)))
            (if (map? opts)
@@ -124,7 +106,7 @@
     (apply query ds (sql/add-limit-1 q) opts)))
 
 (defn ^:private build-by-id-query [ds ename id]
-  (let [ent (cdm/entity (get-data-model ds) ename)]
+  (let [ent (cdm/entity (cds/get-data-model ds) ename)]
     {:from ename :where [:= id (:pk ent)]}))
 
 (defn by-id [ds ename id & [q & opts]]
@@ -143,7 +125,7 @@
              opts))))
 
 (defn query-count [ds q & opts]
-  (apply sql/query-count (force ds) (get-data-model ds) q opts))
+  (apply sql/query-count (force ds) (cds/get-data-model ds) q opts))
 
 (defmacro with-transaction [binding & body]
   (let [[ds-sym ds] (if (symbol? binding)
@@ -192,22 +174,21 @@
   (let [[ds dm] (if (cdm/data-model? ds-or-dm)
                   [nil ds-or-dm]
                   [ds-or-dm nil])
-        dm (or dm (get-data-model ds))]
+        dm (or dm (cds/get-data-model ds))]
     (apply cq/expand-query dm q opts)))
 
 (defn to-sql [ds-or-dm q & opts]
   (let [[ds dm] (if (cdm/data-model? ds-or-dm)
                   [nil ds-or-dm]
                   [ds-or-dm nil])
-        dm (or dm (get-data-model ds))]
+        dm (or dm (cds/get-data-model ds))]
     (apply sql/to-sql q
            :data-model dm
-           :quoting (when ds (sql/detect-quoting
-                               (force ds)))
+           :quoting (when ds (cds/get-quoting ds))
            opts)))
 
 (defn prepare [ds q & opts]
-  (apply sql/prepare (force ds) (get-data-model ds) q opts))
+  (apply sql/prepare (force ds) (cds/get-data-model ds) q opts))
 
 ;;;;
 
@@ -216,7 +197,7 @@
      ~@(for [fn-name fn-names]
          `(defn ~fn-name [~'ds ~'& ~'args]
             (apply ~(symbol "cdm" (name fn-name))
-                   (get-data-model ~'ds) ~'args)))))
+                   (cds/get-data-model ~'ds) ~'args)))))
 
 (def-dm-helpers
   entities entity rels rel fields field field-names shortcut shortcuts resolve-path)
@@ -318,7 +299,7 @@
     (throw-info "Use flat-query to execute plain SQL queries" {:q q}))
   (when (sql/prepared? q)
     (throw-info "Use query* or flat-query to execute prepared queries" {:q q}))
-  (let [dm (get-data-model ds)
+  (let [dm (cds/get-data-model ds)
         [eq env] (cq/expand-query dm q :expand-joins false)
         ent (-> (env (:from eq)) :resolved :value)
         pk (:pk ent)
@@ -387,7 +368,7 @@
   Returns the primary key(s) of the inserted maps."
   [ds ename m-or-ms & {:as opts}]
   (let [ms (cu/seqify m-or-ms)
-        dm (get-data-model ds)
+        dm (cds/get-data-model ds)
         ent (cdm/entity dm ename)
         ret-keys (sql/insert! (force ds) dm ename
                               (map #(get-own-map ent %) ms))]
@@ -401,7 +382,7 @@
 
   Returns the number of records affected by the update."
   [ds ename values pred & {:as opts}]
-  (let [dm (get-data-model ds)
+  (let [dm (cds/get-data-model ds)
         ent (cdm/entity dm ename)
         values* (get-own-map ent values)]
     (sql/update! (force ds) dm ename values pred)))
@@ -411,7 +392,7 @@
 
   Returns the number of records deleted."
   [ds ename pred & {:as opts}]
-  (let [dm (get-data-model ds)]
+  (let [dm (cds/get-data-model ds)]
     (sql/delete! (force ds) dm ename pred)))
 
 (defn delete-ids!
@@ -419,7 +400,7 @@
 
   Returns the number of records deleted."
   [ds ename id-or-ids & {:as opts}]
-  (let [dm (get-data-model ds)
+  (let [dm (cds/get-data-model ds)
         ids (cu/seqify id-or-ids)
         ent (cdm/entity dm ename)]
     (sql/delete! (force ds) dm ename (build-pk-pred (:pk ent) ids))))
@@ -563,7 +544,7 @@
   Accepts the following options:
       :save-rels - when false, does not save related records"
   [ds ename values & {:as opts}]
-  (let [dm (get-data-model ds)
+  (let [dm (cds/get-data-model ds)
         ent (cdm/entity dm ename)
         own-m (get-own-map ent values)]
     (with-transaction ds

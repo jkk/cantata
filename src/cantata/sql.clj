@@ -1,13 +1,13 @@
 (ns cantata.sql
-  (:require [cantata.data-model :as cdm]
+  (:require [cantata.data-source :as cds]
+            [cantata.data-model :as cdm]
             [cantata.query :as cq]
             [cantata.util :as cu :refer [throw-info]]
             [cantata.records :as r]
             [clojure.java.jdbc :as jd]
             [honeysql.core :as hq]
             [clojure.string :as string])
-  (:import com.mchange.v2.c3p0.ComboPooledDataSource
-           cantata.records.PreparedQuery))
+  (:import cantata.records.PreparedQuery))
 
 (set! *warn-on-reflection* true)
 
@@ -165,29 +165,6 @@
               q)))
         q q))))
 
-(def subprotocol->quoting
-  {"postgresql" :ansi
-   "postgres" :ansi
-   "h2" :ansi
-   "derby" :ansi
-   "hsqldb" :ansi
-   "sqlite" :ansi
-   "mysql" :mysql
-   "sqlserver" :sqlserver
-   "jtds:sqlserver" :sqlserver})
-
-(defn detect-quoting [ds]
-  (if (contains? ds :cantata.core/quoting)
-    (:cantata.core/quoting ds)
-    (if-let [subprot (:subprotocol ds)]
-      (subprotocol->quoting subprot)
-      (let [ds* (:datasource ds)]
-        (when (and ds* (instance? ComboPooledDataSource ds*))
-          (let [url (.getJdbcUrl ^ComboPooledDataSource ds*)]
-            (when-let [subprot (second (re-find #"^([^:]+):"
-                                                (string/replace url #"^jdbc:" "")))]
-              (subprotocol->quoting subprot))))))))
-
 (defn plain-sql? [q]
   (or (string? q)
       (and (vector? q) (string? (first q)))
@@ -217,7 +194,7 @@
                    (cq/expand-query dm q))
         [sql] (apply to-sql eq
                      :data-model dm
-                     :quoting (detect-quoting ds)
+                     :quoting (cds/get-quoting ds)
                      :expanded true
                      :env env
                      (apply concat opts))
@@ -240,7 +217,7 @@
                      (into [(:sql q)] (map #(get params %) (:param-names q)))
                      (to-sql eq
                              :data-model dm
-                             :quoting (detect-quoting ds)
+                             :quoting (cds/get-quoting ds)
                              :expanded true
                              :env env
                              :params params))
@@ -256,7 +233,7 @@
 (defn query-count [ds dm q & {:keys [flat] :as opts}]
   (when (plain-sql? q)
     (throw-info "query-count not supported on plain SQL" {:q q}))
-  (let [quoting (detect-quoting ds)
+  (let [quoting (cds/get-quoting ds)
         [q env] (cq/expand-query dm q)
         ent (cdm/entity dm (:from q))
         select (if (or flat
@@ -303,7 +280,7 @@
         no-fields? (empty? fnames)
         env (zipmap fnames (map #(cdm/resolve-path dm ent % :lax no-fields?)
                                 fnames))
-        quoting (detect-quoting ds)
+        quoting (cds/get-quoting ds)
         maps* (map #(qualify-values-map % quoting env) maps)
         table (hq/quote-identifier (:db-name ent)
                                    :style quoting)
@@ -317,7 +294,7 @@
         no-fields? (empty? fnames)
         env (zipmap fnames (map #(cdm/resolve-path dm ent % :lax no-fields?)
                                 fnames))
-        quoting (detect-quoting ds)
+        quoting (cds/get-quoting ds)
         values* (qualify-values-map values quoting env)
         table {(hq/quote-identifier (:db-name ent)
                                     :style quoting)
@@ -335,7 +312,7 @@
         no-fields? (empty? fnames)
         env (zipmap fnames (map #(cdm/resolve-path dm ent % :lax no-fields?)
                                 fnames))
-        quoting (detect-quoting ds)
+        quoting (cds/get-quoting ds)
         table {(hq/quote-identifier (:db-name ent)
                                     :style quoting)
                (hq/quote-identifier ename :style quoting)}
@@ -345,19 +322,6 @@
                 (hq/format-predicate :quoting quoting))]
     (first
       (jd/delete! ds table pred*))))
-
-;; TODO: more customizable options
-(defn create-pool [spec]
-  (let [cpds (doto (ComboPooledDataSource.)
-               (.setDriverClass (:classname spec)) 
-               (.setJdbcUrl (str "jdbc:" (:subprotocol spec) ":" (:subname spec)))
-               (.setUser (:user spec))
-               (.setPassword (:password spec))
-               ;; expire excess connections after 30 minutes of inactivity:
-               (.setMaxIdleTimeExcessConnections (* 30 60))
-               ;; expire connections after 3 hours of inactivity:
-               (.setMaxIdleTime (* 3 60 60)))] 
-    {:datasource cpds}))
 
 ;;;;
 
