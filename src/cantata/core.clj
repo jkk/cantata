@@ -257,16 +257,13 @@
 (defn queryf [ds q & opts]
   (let [res (apply query* ds q opts)
         env (get-query-env res)
-        f1name (-> (cq/first-select-field q)
-                 env :final-path)]
-    (getf res f1name)))
+        f1name (cq/first-select-field q)]
+    (if (= f1name (-> f1name env :root :name))
+      res
+      (getf res (-> f1name env :final-path)))))
 
 (defn queryf1 [ds q & opts]
-  (let [res (apply query* ds q opts)
-        env (get-query-env res)
-        f1name (-> (cq/first-select-field q)
-                 env :final-path)]
-    (getf1 res f1name)))
+  (first (apply queryf ds q opts)))
 
 ;;;;
 

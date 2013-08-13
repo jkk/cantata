@@ -518,11 +518,10 @@
 
 (defn get-from [q]
   (or (:from q)
-      (first
-        (for [path (:select q)
-              :let [quals (cu/qualifiers path)]
-              :when (= 1 (count quals))]
-          (first quals)))
+      (let [quals (for [path (:select q)]
+                    (cu/qualifiers path))]
+        (or (ffirst (filter #(= 1 (count %)) quals))
+            (peek (first (filter seq quals)))))
       (first (:select q))))
 
 ;; FIXME: need nested environments for subqueries to work
@@ -572,6 +571,15 @@
         ;q (expand-subqueries dm q subqs env)
         ]
     [q env]))
+
+(defn first-select-field [q]
+  (let [select (if (sequential? q)
+                 (second (first (filter #(= :select (first %))
+                                        (partition 2 q))))
+                 (:select q))]
+    (if (sequential? select)
+      (first select)
+      select)))
 
 (defn ^:private next-row-group [[row & rows] key-fn]
   (when row
