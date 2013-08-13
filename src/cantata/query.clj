@@ -522,7 +522,8 @@
         (for [path (:select q)
               :let [quals (cu/qualifiers path)]
               :when (= 1 (count quals))]
-          (first quals)))))
+          (first quals)))
+      (first (:select q))))
 
 ;; FIXME: need nested environments for subqueries to work
 (defn expand-query
