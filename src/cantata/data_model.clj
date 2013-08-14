@@ -227,12 +227,6 @@
   ([dm ename sname]
     (shortcut (entity dm ename) sname)))
 
-(defn hooks
-  ([ent]
-    (vals (:hooks ent)))
-  ([dm hname]
-    (hooks (entity dm hname))))
-
 (defn hook
   ([ent hname]
     (get-in ent [:hooks hname]))

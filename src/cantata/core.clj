@@ -220,7 +220,7 @@
 
 (def-dm-helpers
   entities entity rels rel fields field field-names shortcut shortcuts
-  hook hooks validate! resolve-path)
+  validate! resolve-path)
 
 (defn parse
   ([ds ename-or-ent values]
@@ -435,23 +435,26 @@
       (select-keys m (cdm/field-names ent))
       (select-keys m (remove cu/first-qualifier (keys m))))))
 
-(defn ^:private prep-map [ent m]
+(defn ^:private prep-map [ent m validate?]
   (let [m (->> m
             (get-own-map ent)
             (cdm/marshal ent))]
-    (validate! ent m)
+    (when-not (false? validate?)
+      (cdm/validate! ent m))
     m))
 
 (defn insert!
   "Inserts an entity map or maps into the data source. Unlike save, the
   maps may not include related entity maps.
 
+  Set :validate to false to prevent validation.
+
   Returns the primary key(s) of the inserted maps."
-  [ds ename m-or-ms & {:as opts}]
+  [ds ename m-or-ms & {:keys [validate]}]
   (let [ms (cu/seqify m-or-ms)
         dm (cds/get-data-model ds)
         ent (cdm/entity dm ename)
-        ms* (map #(prep-map ent %) ms)]
+        ms* (map #(prep-map ent % validate) ms)]
     (cdm/invoke-hook ent :before-insert ms*)
     (let [ret-keys (sql/insert! (force ds) dm ename ms*)
           ret (if (sequential? m-or-ms)
@@ -464,11 +467,13 @@
   "Updates data source records that match the given predicate with the given
   values. Unlike save, no related field values can be included.
 
+  Set :validate to false to prevent validation.
+
   Returns the number of records affected by the update."
-  [ds ename values pred & {:as opts}]
+  [ds ename values pred & {:keys [validate]}]
   (let [dm (cds/get-data-model ds)
         ent (cdm/entity dm ename)
-        values* (prep-map ent values)]
+        values* (prep-map ent values validate)]
     (cdm/invoke-hook ent :before-update values*)
     (let [ret (sql/update! (force ds) dm ename values* pred)]
       (cdm/invoke-hook ent :after-update values* ret)
@@ -546,16 +551,16 @@
 
 (declare save!)
 
-(defn ^:private save-m [ds ent m]
+(defn ^:private save-m [ds ent m & opts]
   (let [pk (:pk ent)
         id (cdm/pk-val m pk)
         ename (:name ent)]
     (if (nil? id)
-      (insert! ds ename m)
+      (apply insert! ds ename m opts)
       (do
         (if (flat-query1 ds [:from ename :select pk :where [:= pk id]])
-          (update! ds ename m [:= pk id])
-          (insert! ds ename m))
+          (apply update! ds ename m [:= pk id] opts)
+          (apply insert! ds ename m opts))
         id))))
 
 (defn ^:private assoc-pk [m pk id]
@@ -650,7 +655,7 @@
               (assoc rms (mapv :rel chain) (cu/seqify v))))))
       {} m)))
 
-(defn ^:private save-m-rels [ds dm ent own-m m]
+(defn ^:private save-m-rels [ds dm ent own-m m & opts]
   (let [rel-ms (get-rel-maps dm ent m)
         [fwd-rel-ms rev-rel-ms] ((juxt filter remove)
                                   #(-> % key first :reverse not)
@@ -660,7 +665,7 @@
                   (save-belongs-to ds dm rel rms ent own-m))
                 own-m
                 fwd-rel-ms)
-        id (save-m ds ent own-m)]
+        id (apply save-m ds ent own-m opts)]
     (doseq [[rels rms] rev-rel-ms]
       (save-has-many ds dm rels rms ent id))
     id))
@@ -675,17 +680,18 @@
 
   Returns the primary key of the updated or inserted record.
 
-  Accepts the following options:
+  Accepts the following keyword options:
+      :validate  - when false, does not validate saved records
       :save-rels - when false, does not save related records"
-  [ds ename values & {:as opts}]
+  [ds ename values & {:keys [validate save-rels] :as opts}]
   (let [dm (cds/get-data-model ds)
         ent (cdm/entity dm ename)
         own-m (get-own-map ent values)]
     (cdm/invoke-hook ent :before-save ename values)
     (let [ret (with-transaction ds
-                (if (false? (:save-rels opts))
-                  (save-m ds ent own-m)
-                  (save-m-rels ds dm ent own-m values)))]
+                (if (false? save-rels)
+                  (apply save-m ds ent own-m (apply concat opts))
+                  (apply save-m-rels ds dm ent own-m values (apply concat opts))))]
       (cdm/invoke-hook ent :after-save values ret)
       ret)))
 
