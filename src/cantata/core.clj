@@ -430,7 +430,7 @@
         dm (cds/get-data-model ds)
         ent (cdm/entity dm ename)
         ret-keys (sql/insert! (force ds) dm ename
-                              (map #(cdm/marshal dm ent (get-own-map ent %))
+                              (map #(cdm/marshal ent (get-own-map ent %))
                                    ms))]
     (if (sequential? m-or-ms)
        ret-keys
@@ -444,7 +444,7 @@
   [ds ename values pred & {:as opts}]
   (let [dm (cds/get-data-model ds)
         ent (cdm/entity dm ename)
-        values* (cdm/marshal dm ent (get-own-map ent values))]
+        values* (cdm/marshal ent (get-own-map ent values))]
     (sql/update! (force ds) dm ename values pred)))
 
 (defn delete!

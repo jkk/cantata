@@ -309,19 +309,13 @@
   v)
 
 (defn marshal
-  ([dm ename-or-ent values]
-    (let [ent (if (keyword? ename-or-ent)
-                (entity dm ename-or-ent)
-                ename-or-ent)
-          [fnames values] (if (map? values)
+  ([ent values]
+    (let [[fnames values] (if (map? values)
                             [(keys values) (vals values)]
                             [(field-names ent) values])]
-      (marshal dm ent fnames values)))
-  ([dm ename-or-ent fnames values]
-    (let [ent (if (keyword? ename-or-ent)
-                (entity dm ename-or-ent)
-                ename-or-ent)
-          fields (:fields ent)]
+      (marshal ent fnames values)))
+  ([ent fnames values]
+    (let [fields (:fields ent)]
       (loop [m (om/ordered-map)
              [fname & fnames] fnames
              [v & values] values]
