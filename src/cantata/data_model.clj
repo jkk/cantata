@@ -275,17 +275,22 @@
         (if-not fname
           m
           (let [type (-> fname fields :type)
-                v* (case type
-                     :int (cp/to-int v)
-                     :str (cp/to-str v)
-                     :boolean (cp/to-str v)
-                     :datetime (cp/to-datetime v)
-                     :date (cp/to-date v)
-                     :time (cp/to-time v)
-                     :double (cp/to-double v)
-                     :decimal (cp/to-decimal v)
-                     :bytes (cp/to-bytes v)
-                     (construct-value v type))
+                v* (try
+                     (case type
+                       :int (cp/to-int v)
+                       :str (cp/to-str v)
+                       :boolean (cp/to-str v)
+                       :datetime (cp/to-datetime v)
+                       :date (cp/to-date v)
+                       :time (cp/to-time v)
+                       :double (cp/to-double v)
+                       :decimal (cp/to-decimal v)
+                       :bytes (cp/to-bytes v)
+                       (construct-value v type))
+                     (catch Exception e
+                       (let [msg (str "Failed to parse " fname
+                                      " for entity " (:name ent))]
+                         (throw-info msg {:problems [{:keys [fname] :msg msg}]}))))
                 m* (assoc m fname v*)]
             (recur m* fnames values)))))))
 
