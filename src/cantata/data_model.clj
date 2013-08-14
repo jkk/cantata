@@ -247,6 +247,14 @@
          (count
            (take num-pk (filter (set pk) m-or-fields)))))))
 
+(defn untyped?
+  ([ent]
+    (let [fields (fields ent)]
+      (or (empty? fields)
+          (every? nil? (map :type fields)))))
+  ([dm ename]
+    (untyped? (entity dm ename))))
+
 ;;;;
 
 ;; For custom types
