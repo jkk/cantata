@@ -50,6 +50,7 @@
 
 (def ^:private unmarshal-fnmap
   {:clob-str cp/clob->str
+   :blob-bytes cp/blob->bytes
    :joda-dates cp/date->joda})
 
 (def ^:private marshal-fnmap

@@ -156,6 +156,14 @@
   Object (clob->str [x] x)
   nil (clob->str [_] nil))
 
+(defprotocol BlobToBytes
+  (blob->bytes [x]))
+
+(extend-protocol BlobToBytes
+  java.sql.Blob (blob->bytes [x] (.getBytes x 0 (.length x)))
+  Object (blob->bytes [x] x)
+  nil (blob->bytes [_] nil))
+
 (defprotocol DateToJoda
   (date->joda [x]))
 
