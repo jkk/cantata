@@ -75,8 +75,8 @@
    :date ["DATE" "date"]
    :time ["TIME" "time" "timetz"]
    :datetime ["TIMESTAMP" "DATETIME" "timestamp" "timestamptz"]
-   :blob ["BLOB" "TINYBLOB" "MEDIUMBLOB" "LONGBLOB" "BINARY" "VARBINARY"
-          "LONGVARBINARY" "bytea"]})
+   :bytes ["BLOB" "TINYBLOB" "MEDIUMBLOB" "LONGBLOB" "BINARY" "VARBINARY"
+         	 "LONGVARBINARY" "bytea"]})
 
 (def db-type->type
   (into {} (for [[t dts] type->db-type

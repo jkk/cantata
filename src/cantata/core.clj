@@ -212,7 +212,8 @@
                    (cds/get-data-model ~'ds) ~'args)))))
 
 (def-dm-helpers
-  entities entity rels rel fields field field-names shortcut shortcuts resolve-path)
+  entities entity rels rel fields field field-names shortcut shortcuts resolve-path
+  construct)
 
 ;;;;
 
