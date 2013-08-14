@@ -73,7 +73,7 @@
              (create-pool (merge ds opts))
              db-spec)
         dm (if (:reflect opts)
-             (cdm/reflect-data-model ds dm)
+             (apply cdm/reflect-data-model ds dm (apply concat opts))
              (when dm
                (if (cdm/data-model? dm)
                  dm

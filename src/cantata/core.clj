@@ -10,8 +10,8 @@
 (defn data-model [entity-specs]
   (cdm/data-model entity-specs))
 
-(defn reflect-data-model [ds entity-specs]
-  (cdm/reflect-data-model (force ds) entity-specs))
+(defn reflect-data-model [ds entity-specs & opts]
+  (apply cdm/reflect-data-model (force ds) entity-specs opts))
 
 (defn data-source [db-spec & model+opts]
   (apply cds/data-source db-spec model+opts))

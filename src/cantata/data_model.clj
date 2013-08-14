@@ -150,22 +150,22 @@
     (for [name names]
       (merge (first (g1 name)) (first (g2 name))))))
 
-(defn reflect-data-model [ds entity-specs]
+(defn reflect-data-model [ds entity-specs & opts]
   (data-model
     (let [especs (merge-entity-specs
-                   (reflect/reflect-entities ds)
+                   (apply reflect/reflect-entities ds opts)
                    (normalize-entity-specs entity-specs))]
       (for [espec especs]
         (let [db-name (or (:db-name espec)
                           (reflect/guess-db-name (:name espec)))]
           (assoc espec
                  :fields (or (:fields espec)
-                             (reflect/reflect-fields ds db-name))
+                             (apply reflect/reflect-fields ds db-name opts))
                  :rels (or (:rels espec)
-                           (reflect/reflect-rels ds db-name))
+                           (apply reflect/reflect-rels ds db-name opts))
                  :pk (or (:pk espec)
                          (:name (first (:fields espec)))
-                         (reflect/reflect-pk ds db-name))))))))
+                         (apply reflect/reflect-pk ds db-name opts))))))))
 
 ;;;;
 
