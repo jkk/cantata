@@ -287,7 +287,7 @@
                    (case type
                      :int (cp/parse-int v)
                      :str (cp/parse-str v)
-                     :boolean (cp/parse-str v)
+                     :boolean (cp/parse-boolean v)
                      :datetime (parse-datetime v)
                      :date (parse-date v)
                      :time (parse-time v)
@@ -315,7 +315,7 @@
                  (case type
                    :int (cp/parse-int v)
                    :str (cp/parse-str v)
-                   :boolean (cp/parse-str v)
+                   :boolean (cp/parse-boolean v)
                    :datetime (if joda-dates?
                                (cp/parse-joda-datetime v)
                                (cp/parse-datetime v))
@@ -360,7 +360,7 @@
                      (case type
                        :int (cp/parse-int v)
                        :str (cp/parse-str v)
-                       :boolean (cp/parse-str v)
+                       :boolean (cp/parse-boolean v)
                        :datetime (cp/parse-datetime v)
                        :date (cp/parse-date v)
                        :time (cp/parse-time v)
