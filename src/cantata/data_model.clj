@@ -227,6 +227,18 @@
   ([dm ename sname]
     (shortcut (entity dm ename) sname)))
 
+(defn hooks
+  ([ent]
+    (vals (:hooks ent)))
+  ([dm hname]
+    (hooks (entity dm hname))))
+
+(defn hook
+  ([ent hname]
+    (get-in ent [:hooks hname]))
+  ([dm ename hname]
+    (hook (entity dm ename) hname)))
+
 (defn normalize-pk [pk]
   (cu/seqify pk))
 
@@ -388,6 +400,22 @@
                          {:problems [{:keys [fname] :msg "Invalid value"}]})))
                 m* (assoc m fname v*)]
             (recur m* fnames values)))))))
+
+;;;;
+
+(defn invoke-hook [ent hname & args]
+  (when-let [hf (hook ent hname)]
+    (apply hf ent args)))
+
+(defn validate!
+  ([ent m]
+    (let [problems (invoke-hook ent :validate m)]
+      (when (and problems (not (and (sequential? problems)
+                                    (empty? problems))))
+        (throw-info ["Validation failed for entity" (:name ent)]
+                    {:problems (cu/seqify problems) :values m}))))
+  ([dm ename m]
+    (validate! (entity dm ename) m)))
 
 ;;;;
 

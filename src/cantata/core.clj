@@ -2,6 +2,7 @@
   (:require [cantata.util :as cu :refer [throw-info]]
             [cantata.data-model :as cdm]
             [cantata.data-source :as cds]
+            [cantata.records :as r]
             [cantata.query :as cq]
             [cantata.sql :as sql]
             [clojure.java.jdbc :as jd]
@@ -218,7 +219,8 @@
                    (cds/get-data-model ~'ds) ~'args)))))
 
 (def-dm-helpers
-  entities entity rels rel fields field field-names shortcut shortcuts resolve-path)
+  entities entity rels rel fields field field-names shortcut shortcuts
+  hook hooks validate! resolve-path)
 
 (defn parse
   ([ds ename-or-ent values]
@@ -237,6 +239,15 @@
                 ename-or-ent)
           joda-dates? (cds/get-option ds :joda-dates)]
       (cdm/parse ent fnames values :joda-dates joda-dates?))))
+
+(defn problem
+  ([keys-or-msg]
+    (let [[keys msg] (if (sequential? keys-or-msg)
+                        [keys-or-msg]
+                        [nil keys-or-msg])]
+      (problem keys msg)))
+  ([keys msg]
+    (r/->ValidationProblem keys msg)))
 
 ;;;;
 
@@ -424,6 +435,13 @@
       (select-keys m (cdm/field-names ent))
       (select-keys m (remove cu/first-qualifier (keys m))))))
 
+(defn ^:private prep-map [ent m]
+  (let [m (->> m
+            (get-own-map ent)
+            (cdm/marshal ent))]
+    (validate! ent m)
+    m))
+
 (defn insert!
   "Inserts an entity map or maps into the data source. Unlike save, the
   maps may not include related entity maps.
@@ -433,12 +451,14 @@
   (let [ms (cu/seqify m-or-ms)
         dm (cds/get-data-model ds)
         ent (cdm/entity dm ename)
-        ret-keys (sql/insert! (force ds) dm ename
-                              (map #(cdm/marshal ent (get-own-map ent %))
-                                   ms))]
-    (if (sequential? m-or-ms)
-       ret-keys
-       (first ret-keys))))
+        ms* (map #(prep-map ent %) ms)]
+    (cdm/invoke-hook ent :before-insert ms*)
+    (let [ret-keys (sql/insert! (force ds) dm ename ms*)
+          ret (if (sequential? m-or-ms)
+                ret-keys
+                (first ret-keys))]
+      (cdm/invoke-hook ent :after-insert ms* ret)
+      ret)))
 
 (defn update!
   "Updates data source records that match the given predicate with the given
@@ -448,8 +468,11 @@
   [ds ename values pred & {:as opts}]
   (let [dm (cds/get-data-model ds)
         ent (cdm/entity dm ename)
-        values* (cdm/marshal ent (get-own-map ent values))]
-    (sql/update! (force ds) dm ename values pred)))
+        values* (prep-map ent values)]
+    (cdm/invoke-hook ent :before-update values*)
+    (let [ret (sql/update! (force ds) dm ename values* pred)]
+      (cdm/invoke-hook ent :after-update values* ret)
+      ret)))
 
 (defn delete!
   "Deletes records from data source that match the given predicate, or all
@@ -459,8 +482,12 @@
   ([ds ename]
     (delete! ds ename nil))
   ([ds ename pred & {:as opts}]
-    (let [dm (cds/get-data-model ds)]
-      (sql/delete! (force ds) dm ename pred))))
+    (let [dm (cds/get-data-model ds)
+          ent (cdm/entity dm ename)]
+      (cdm/invoke-hook ent :before-delete pred)
+      (let [ret (sql/delete! (force ds) dm ename pred)]
+        (cdm/invoke-hook ent :after-delete pred ret)
+        ret))))
 
 (defn cascading-delete!
   "Deletes ALL database records for an entity, and ALL dependent records. Or,
@@ -485,9 +512,9 @@
   Returns the number of records deleted."
   [ds ename id-or-ids & {:as opts}]
   (let [dm (cds/get-data-model ds)
-        ids (cu/seqify id-or-ids)
-        ent (cdm/entity dm ename)]
-    (sql/delete! (force ds) dm ename (build-key-pred (:pk ent) ids))))
+        ent (cdm/entity dm ename)
+        ids (cu/seqify id-or-ids)]
+    (delete! ds ename (build-key-pred (:pk ent) ids))))
 
 (defn cascading-delete-ids!
   "Deletes any dependent records and then deletes the entity record for the
@@ -654,10 +681,13 @@
   (let [dm (cds/get-data-model ds)
         ent (cdm/entity dm ename)
         own-m (get-own-map ent values)]
-    (with-transaction ds
-      (if (false? (:save-rels opts))
-        (save-m ds ent own-m)
-        (save-m-rels ds dm ent own-m values)))))
+    (cdm/invoke-hook ent :before-save ename values)
+    (let [ret (with-transaction ds
+                (if (false? (:save-rels opts))
+                  (save-m ds ent own-m)
+                  (save-m-rels ds dm ent own-m values)))]
+      (cdm/invoke-hook ent :after-save values ret)
+      ret)))
 
 ;;;;
 
