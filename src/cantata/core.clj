@@ -42,10 +42,10 @@
   ([ds q body-fn]
     (with-query-maps* ds q nil body-fn))
   ([ds q opts body-fn]
-    (let [unordered? (cds/get-option ds :unordered-maps)]
+    (let [ds-opts (cds/get-options ds)]
       (apply sql/query (force ds) (cds/get-data-model ds) q
              (fn [cols rows]
-               (body-fn (map #(cq/build-result-map cols % unordered?)
+               (body-fn (map #(cq/build-result-map cols % ds-opts)
                              rows)))
              (if (map? opts)
                (apply concat opts)
@@ -66,10 +66,10 @@
 
 ;; TODO: version that works on arbitrary vector/map data, sans env
 (defn nest
-  ([cols rows & {:keys [unordered]}]
+  ([cols rows & {:keys [ds-opts]}]
     (with-meta
       (cq/nest cols rows
-               (get-query-from cols) (get-query-env cols) (boolean unordered))
+               (get-query-from cols) (get-query-env cols) ds-opts)
       (meta cols))))
 
 ;;
@@ -81,24 +81,24 @@
 ;;
 
 (defn flat-query [ds q & {:keys [vectors] :as opts}]
-  (let [unordered? (cds/get-option ds :unordered-maps)]
+  (let [ds-opts (cds/get-options ds)]
     (with-query-rows* ds q opts
       (fn [cols rows]
         (if vectors
           [cols rows]
           (with-meta
-            (mapv #(cq/build-result-map cols % unordered?) rows)
+            (mapv #(cq/build-result-map cols % ds-opts) rows)
             (meta cols)))))))
 
 (defn flat-query1 [ds q & {:keys [vectors] :as opts}]
-  (let [unordered? (cds/get-option ds :unordered-maps)]
+  (let [ds-opts (cds/get-options ds)]
     (with-query-rows* ds (sql/add-limit-1 q) opts
       (fn [cols rows]
         (if vectors
           [cols (first rows)]
           (when (first rows)
             (with-meta
-              (cq/build-result-map cols (first rows) unordered?)
+              (cq/build-result-map cols (first rows) ds-opts)
               (meta cols))))))))
 
 (defn query* [ds q & opts]
@@ -107,7 +107,7 @@
   ;; TODO: implicitly add/remove PKs if necessary? :force-pk opt?
   (with-query-rows* ds q opts
     (fn [cols rows]
-      (nest cols rows :unordered (cds/get-option ds :unordered-maps)))))
+      (nest cols rows :ds-opts (cds/get-options ds)))))
 
 (defn query1* [ds q & opts]
   (let [ms (apply query* ds (sql/add-limit-1 q) opts)]
