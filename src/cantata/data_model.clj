@@ -289,11 +289,55 @@
                      :bytes (cp/parse-bytes v)
                      (parse-value v type))
                    (catch Exception e
-                     (let [msg (str "Failed to parse " fname
-                                    " for entity " (:name ent))]
-                       (throw-info msg {:problems [{:keys [fname] :msg msg}]}))))
+                     (throw-info
+                       ["Failed to parse" fname "for entity" (:name ent)]
+                       {:problems [{:keys [fname] :msg "Invalid value"}]})))
               m* (assoc m fname v*)]
           (recur m* fnames values))))))
+
+(defmulti marshal-value (fn [v type] type))
+
+(defmethod marshal-value :default [v type]
+  v)
+
+(defn marshal
+  ([dm ename-or-ent values]
+    (let [ent (if (keyword? ename-or-ent)
+                (entity dm ename-or-ent)
+                ename-or-ent)
+          [fnames values] (if (map? values)
+                            [(keys values) (vals values)]
+                            [(field-names ent) values])]
+      (marshal dm ent fnames values)))
+  ([dm ename-or-ent fnames values]
+    (let [ent (if (keyword? ename-or-ent)
+                (entity dm ename-or-ent)
+                ename-or-ent)
+          fields (:fields ent)]
+      (loop [m (om/ordered-map)
+             [fname & fnames] fnames
+             [v & values] values]
+        (if-not fname
+          m
+          (let [type (-> fname fields :type)
+                v* (try
+                     (case type
+                       :int (cp/parse-int v)
+                       :str (cp/parse-str v)
+                       :boolean (cp/parse-str v)
+                       :datetime (cp/parse-datetime v)
+                       :date (cp/parse-date v)
+                       :time (cp/parse-time v)
+                       :double (cp/parse-double v)
+                       :decimal (cp/parse-decimal v)
+                       :bytes (cp/parse-bytes v)
+                       (marshal-value v type))
+                     (catch Exception e
+                       (throw-info
+                         ["Failed to marshal" fname "for entity" (:name ent)]
+                         {:problems [{:keys [fname] :msg "Invalid value"}]})))
+                m* (assoc m fname v*)]
+            (recur m* fnames values)))))))
 
 ;;;;
 
