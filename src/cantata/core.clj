@@ -218,32 +218,41 @@
 
 (defn getf
   "Fetches one or more nested field values from the given query result or
-  results, traversing into related results as necessary.
+  results, according to a dotted keyword path, traversing into related results
+  as necessary.
+
+  Path and query result can be swapped as arguments. I.e., (getf :title results)
+  and (getf results :title) do the same thing.
 
   If invoked with one argument, returns a partial that looks up the path."
   ([path]
     #(getf % path))
   ([qr path]
-    ;; TODO: allow sequential path -> maps getf over each
-    (or
-      (path qr)
-      (let [ks (cu/split-path path)]
-        (reduce
-          (fn [maps k]
-            (if (sequential? maps)
-              (let [maps* (map k maps)]
-                (if (sequential? (first maps*))
-                  (apply concat maps*)
-                  maps*))
-              (k maps)))
-          qr
-          ks)))))
+    (let [[qr path] (if (keyword? path)
+                      [qr path]
+                      [path qr])]
+      (or
+        (path qr)
+        (let [ks (cu/split-path path)]
+          (reduce
+            (fn [maps k]
+              (if (sequential? maps)
+                (let [maps* (map k maps)]
+                  (if (sequential? (first maps*))
+                    (apply concat maps*)
+                    maps*))
+                (k maps)))
+            qr
+            ks))))))
 
 (defn getf1
   "Fetches a nested field value from the given query result or results,
   traversing into related results as necessary. Returns the same as getf except
   if the result would be a sequence, in which case it returns the first
   element.
+
+  Path and query result can be swapped as arguments. I.e., (getf :title results)
+  and (getf results :title) do the same thing.
 
   If invoked with one argument, returns a partial that looks up the path."
   ([path]
