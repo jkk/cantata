@@ -17,9 +17,6 @@
 (defn data-source [db-spec & model+opts]
   (apply cds/data-source db-spec model+opts))
 
-(defn pooled-data-source [db-spec & model+opts]
-  (apply cds/pooled-data-source db-spec model+opts))
-
 (defn build-query [& qargs]
   (apply cq/build-query qargs))
 

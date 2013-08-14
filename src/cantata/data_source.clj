@@ -89,17 +89,6 @@
     (cond-> ds
             dm (assoc ::data-model dm))))
 
-(defn pooled-data-source
-  ;; TODO: doc opts & defaults
-  [db-spec & model+opts]
-  (let [opts (apply hash-map (if (keyword? (first model+opts))
-                               model+opts
-                               (rest model+opts)))]
-    (apply data-source
-           (create-pool (merge (normalize-db-spec db-spec)
-                               opts))
-           model+opts)))
-
 (defn get-data-model [ds]
   (::data-model (force ds)))
 
