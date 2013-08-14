@@ -630,6 +630,10 @@
                  (first v)
                  v))))
 
+(defn build-result-map [fnames fvals]
+  ;; TODO: parse
+  (cu/zip-ordered-map fnames fvals))
+
 (defn ^:private nest-group
   [cols rows col->idx col->info all-path-parts path-parts pk-cols]
   (let [pp-len (count path-parts)
@@ -650,7 +654,7 @@
       (throw-info ["Cannot nest: PK cols" pk-cols "not present in query results"]
                   {:pk-cols pk-cols :cols cols :path-parts path-parts}))
     (if (empty? rel-cols)
-      (mapv #(cu/zip-ordered-map own-basenames (map % own-idxs))
+      (mapv #(build-result-map own-basenames (map % own-idxs))
             (filter #(every? % pk-idxs) ;nil PK = absent outer-joined row
                     (cu/distinct-key key-fn rows)))
       (let [next-infos (cu/distinct-key
@@ -673,8 +677,7 @@
                 (nest-in m (dropv (count path-parts) rel-pp) rel-pp-rev
                          (nest-group
                            rel-cols group col->idx col->info all-path-parts rel-pp rel-pk-cols)))
-              (cu/zip-ordered-map
-                own-basenames (map (first group) own-idxs))
+              (build-result-map own-basenames (map (first group) own-idxs))
               next-infos)))))))
 
 (defn ^:private get-rp-pk [resolved-path default-pk]

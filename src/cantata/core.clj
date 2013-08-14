@@ -44,7 +44,7 @@
   ([ds q opts body-fn]
     (apply sql/query (force ds) (cds/get-data-model ds) q
            (fn [cols rows]
-             (body-fn (map #(cu/zip-ordered-map cols %) rows)))
+             (body-fn (map #(cq/build-result-map cols %) rows)))
            (if (map? opts)
              (apply concat opts)
              opts))))
@@ -83,7 +83,7 @@
       (if vectors
         [cols rows]
         (with-meta
-          (mapv #(cu/zip-ordered-map cols %) rows)
+          (mapv #(cq/build-result-map cols %) rows)
           (meta cols))))))
 
 (defn flat-query1 [ds q & {:keys [vectors] :as opts}]
@@ -93,7 +93,7 @@
         [cols (first rows)]
         (when (first rows)
           (with-meta
-            (cu/zip-ordered-map cols (first rows))
+            (cq/build-result-map cols (first rows))
             (meta cols)))))))
 
 (defn query* [ds q & opts]
