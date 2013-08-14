@@ -210,13 +210,13 @@
 (defn ^:private get-row-fn [ds eq from-ent env]
   (let [ds-unmarshal (cds/get-row-unmarshaller ds)
         eselect (:select eq)]
-    (if (seq eselect)
+    (if (and (seq eselect) (not (cdm/untyped? from-ent)))
       (let [eselect (into [] eselect)
             types (into [] (for [f eselect]
                              (-> f env :resolved :value :type)))
             joda-dates? (cds/get-option ds :joda-dates)]
-        #(cdm/parse-row
-           from-ent eselect (ds-unmarshal %) types joda-dates?))
+        (comp (cdm/make-row-parser from-ent eselect types :joda-dates joda-dates?)
+              ds-unmarshal))
       ds-unmarshal)))
 
 (defn query [ds dm q callback & {:keys [expanded env params]}]

@@ -263,6 +263,34 @@
 (defmethod parse-value :default [v type]
   v)
 
+(def ^:private type-parser-map
+  {:int cp/parse-int
+   :str cp/parse-str
+   :boolean cp/parse-boolean
+   :datetime cp/parse-datetime
+   :date cp/parse-date
+   :time cp/parse-time
+   :double cp/parse-double
+   :decimal cp/parse-decimal
+   :bytes cp/parse-bytes})
+
+(defn type-parser [type & {:keys [joda-dates]}]
+  (let [parse-datetime (if joda-dates
+                         cp/parse-joda-datetime
+                         cp/parse-datetime)
+        parse-date (if joda-dates
+                     cp/parse-joda-date
+                     cp/parse-date)
+        parse-time (if joda-dates
+                     cp/parse-joda-time
+                     cp/parse-time)]
+    (condp = type
+      :datetime parse-datetime
+      :date parse-date
+      :time parse-time
+      (or (type-parser-map type)
+          #(parse-value % type)))))
+
 (defn parse
   [ent fnames values & {:keys [joda-dates ordered-map]}]
   (let [fields (:fields ent)
@@ -302,40 +330,26 @@
               m* (assoc m fname v*)]
           (recur m* fnames values))))))
 
-(defn parse-row
-  [ent cols row types joda-dates?]
-  ;; Assumes most row values don't change
-  (loop [i 0
-         row row]
-    (if (= i (count row))
-      row
-      (let [v (nth row i)
-            type (nth types i)
-            v* (try
-                 (case type
-                   :int (cp/parse-int v)
-                   :str (cp/parse-str v)
-                   :boolean (cp/parse-boolean v)
-                   :datetime (if joda-dates?
-                               (cp/parse-joda-datetime v)
-                               (cp/parse-datetime v))
-                   :date (if joda-dates?
-                           (cp/parse-joda-date v)
-                           (cp/parse-date v))
-                   :time (if joda-dates?
-                           (cp/parse-joda-time v)
-                           (cp/parse-time v))
-                   :double (cp/parse-double v)
-                   :decimal (cp/parse-decimal v)
-                   :bytes (cp/parse-bytes v)
-                   (parse-value v type))
-                 (catch Exception e
-                   (throw-info
-                     ["Failed to parse" (nth cols i) "for entity" (:name ent)]
-                     {:problems [{:keys [(nth cols i)] :msg "Invalid value"}]})))]
-        (recur (inc i) (if (identical? v v*)
-                         row
-                         (assoc row i v*)))))))
+(defn make-row-parser [ent cols types & opts]
+  (let [idx-parsers
+        (into
+          [] (for [[idx type] (map-indexed list types)]
+               (let [parser (apply type-parser type opts)]
+                 [idx
+                  #(try
+                     (parser %)
+                     (catch Exception e
+                       (throw-info
+                         ["Failed to parse" (nth cols idx)
+                          "for entity" (:name ent)]
+                         {:problems [{:keys [(nth cols idx)]
+                                      :msg "Invalid value"}]})))])))]
+    (fn [row]
+      (reduce
+        (fn [row [idx parser]]
+          (assoc row idx (parser (nth row idx))))
+        row
+        idx-parsers))))
 
 (defmulti marshal-value (fn [v type] type))
 
