@@ -231,8 +231,11 @@
       (parse ds ent fnames values)))
   ([ds ename-or-ent fnames values]
     (let [dm (cds/get-data-model ds)
+          ent (if (keyword? ename-or-ent)
+                (cdm/entity dm ename-or-ent)
+                ename-or-ent)
           joda-dates? (cds/get-option ds :joda-dates)]
-      (cdm/parse dm ename-or-ent fnames values :joda-dates joda-dates?))))
+      (cdm/parse ent fnames values :joda-dates joda-dates?))))
 
 ;;;;
 

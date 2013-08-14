@@ -264,11 +264,8 @@
   v)
 
 (defn parse
-  [dm ename-or-ent fnames values & {:keys [joda-dates]}]
-  (let [ent (if (keyword? ename-or-ent)
-              (entity dm ename-or-ent)
-              ename-or-ent)
-        fields (:fields ent)
+  [ent fnames values & {:keys [joda-dates]}]
+  (let [fields (:fields ent)
         parse-datetime (if joda-dates
                          cp/parse-joda-datetime
                          cp/parse-datetime)
