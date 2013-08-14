@@ -207,6 +207,18 @@
 (defn undasherize [s]
   (string/replace s "-" "_"))
 
+(defn ^:private get-row-fn [ds eq from-ent env]
+  (let [ds-unmarshal (cds/get-row-unmarshaller ds)
+        eselect (:select eq)]
+    (if (seq eselect)
+      (let [eselect (into [] eselect)
+            types (into [] (for [f eselect]
+                             (-> f env :resolved :value :type)))
+            joda-dates? (cds/get-option ds :joda-dates)]
+        #(cdm/parse-row
+           from-ent eselect (ds-unmarshal %) types joda-dates?))
+      ds-unmarshal)))
+
 (defn query [ds dm q callback & {:keys [expanded env params]}]
   (let [prepped? (prepared? q)
         [eq env] (cond
@@ -222,11 +234,13 @@
                              :env env
                              :params params))
         _ (when cu/*verbose* (prn sql-params))
+        from-ent (cdm/entity dm (:from eq))
+        row-fn (get-row-fn ds eq from-ent env)
         [cols & rows] (jd/query ds sql-params
                                 :identifiers dasherize
-                                :row-fn (cds/get-row-unmarshaller ds)
+                                :row-fn row-fn
                                 :as-arrays? true)
-        qmeta {:cantata.core/query-from (cdm/entity dm (:from eq))
+        qmeta {:cantata.core/query-from from-ent
                :cantata.core/query-env env
                :cantata.core/query-expanded eq}]
     (callback (with-meta cols qmeta)

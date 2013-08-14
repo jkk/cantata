@@ -67,10 +67,11 @@
 ;; TODO: version that works on arbitrary vector/map data, sans env
 (defn nest
   ([cols rows & {:keys [ds-opts]}]
-    (with-meta
-      (cq/nest cols rows
-               (get-query-from cols) (get-query-env cols) ds-opts)
-      (meta cols))))
+    (let [from (get-query-from cols)
+          env (get-query-env cols)]
+      (with-meta
+        (cq/nest cols rows from env ds-opts)
+        (meta cols)))))
 
 ;;
 ;; QUERY CHOICES

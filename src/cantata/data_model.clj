@@ -302,6 +302,41 @@
               m* (assoc m fname v*)]
           (recur m* fnames values))))))
 
+(defn parse-row
+  [ent cols row types joda-dates?]
+  ;; Assumes most row values don't change
+  (loop [i 0
+         row row]
+    (if (= i (count row))
+      row
+      (let [v (nth row i)
+            type (nth types i)
+            v* (try
+                 (case type
+                   :int (cp/parse-int v)
+                   :str (cp/parse-str v)
+                   :boolean (cp/parse-str v)
+                   :datetime (if joda-dates?
+                               (cp/parse-joda-datetime v)
+                               (cp/parse-datetime v))
+                   :date (if joda-dates?
+                           (cp/parse-joda-date v)
+                           (cp/parse-date v))
+                   :time (if joda-dates?
+                           (cp/parse-joda-time v)
+                           (cp/parse-time v))
+                   :double (cp/parse-double v)
+                   :decimal (cp/parse-decimal v)
+                   :bytes (cp/parse-bytes v)
+                   (parse-value v type))
+                 (catch Exception e
+                   (throw-info
+                     ["Failed to parse" (nth cols i) "for entity" (:name ent)]
+                     {:problems [{:keys [(nth cols i)] :msg "Invalid value"}]})))]
+        (recur (inc i) (if (identical? v v*)
+                         row
+                         (assoc row i v*)))))))
+
 (defmulti marshal-value (fn [v type] type))
 
 (defmethod marshal-value :default [v type]
