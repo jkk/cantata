@@ -75,7 +75,7 @@
 
 (defmethod qualify-clause :from [_ from quoting env]
   (if-let [ent (-> (env from) :resolved :value)]
-    [[(identifier (:db-name ent) quoting) from]]
+    [[(identifier (:db-schema ent) (:db-name ent) quoting) from]]
     [from]))
 
 (declare qualify-query)
