@@ -313,7 +313,7 @@
                        [(cdm/pk-val m pk)
                         (getf m qual)]))])))
 
-(defn ^:private incorporate-many-results [pk pk? npk maps many-results sks]
+(defn ^:private incorporate-many-results [pk pk? npk maps many-results sks env]
   (let [rempk (remove (set sks) npk)]
     (into
       []
@@ -325,11 +325,13 @@
           (reduce
             (fn [m [qual pk->rel-maps]]
               (let [id (cdm/pk-val m pk)
-                    rel-maps (pk->rel-maps id)]
-                (cq/nest-in
-                  (if pk? m (apply dissoc m rempk))
-                  (cu/split-path qual)
-                  rel-maps)))
+                    rel-maps (pk->rel-maps id)
+                    m (if pk? m (apply dissoc m rempk))
+                    qual-parts (cu/split-path qual)
+                    qual-revs (for [part qual-parts]
+                                (when-let [chain (not-empty (-> part env :chain))]
+                                  (some (comp :reverse :rel) chain)))]
+                (cq/nest-in m qual-parts qual-revs rel-maps)))
             m many-results))))))
 
 (defn query [ds q & opts]
@@ -381,7 +383,7 @@
                                       (fetch-many-results
                                         ds ent pk npk ids many-groups opts))]
                    (incorporate-many-results
-                     pk pk? npk maps many-results select-paths)))]
+                     pk pk? npk maps many-results select-paths env)))]
     (with-meta
       maps
       {::query-from ent
@@ -588,16 +590,11 @@
               chain (not-empty (:chain rp))]
           (if-not chain
             rms
-            (cond
-              (not (rel-save-allowed? chain))
+            (if-not (rel-save-allowed? chain)
               (throw-info
                 ["Rel" k "not allowed here - saving entity" (:name ent)]
                 {:rname k :ename (:name ent)})
-              (not (sequential? v))
-              (throw-info
-                ["Rel value" k "must be sequential - saving entity" (:name ent)]
-                {:rname k :ename (:name ent)})
-              :else	(assoc rms (mapv :rel chain) v)))))
+              (assoc rms (mapv :rel chain) (cu/seqify v))))))
       {} m)))
 
 (defn ^:private save-m-rels [ds dm ent own-m m]

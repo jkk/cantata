@@ -622,10 +622,13 @@
       pops
       (recur (conj pops v) (pop v)))))
 
-(defn nest-in [m [k & ks] v]
+(defn nest-in [m [k & ks] [rev? & revs] v]
   (if ks
-    (assoc m k [(nest-in {} ks v)])
-    (assoc m k v)))
+    (let [nv (nest-in {} ks revs v)]
+      (assoc m k (if rev? [nv] nv)))
+    (assoc m k (if (and (not rev?) (sequential? v))
+                 (first v)
+                 v))))
 
 (defn ^:private nest-group
   [cols rows col->idx col->info all-path-parts path-parts pk-cols]
@@ -641,8 +644,8 @@
         own-basenames (map #(nth (col->info %) 2) own-cols)
         pk-idxs	(keep col->idx pk-cols)
         key-fn (get-key-fn pk-idxs own-idxs)]
-    ;; Having this makes nesting reliable, but also makes queries more tedious
-    ;; to write
+    ;; Having this makes nesting/distincting reliable, but also makes queries
+    ;; more tedious to write
     #_(when (or (empty? pk-idxs) (not-every? identity pk-idxs))
       (throw-info ["Cannot nest: PK cols" pk-cols "not present in query results"]
                   {:pk-cols pk-cols :cols cols :path-parts path-parts}))
@@ -666,8 +669,8 @@
           []
           (for [group (group-rows rows key-fn)]
             (reduce
-              (fn [m [rel-pk-cols rel-pp]]
-                (nest-in m (dropv (count path-parts) rel-pp)
+              (fn [m [rel-pk-cols rel-pp _ rel-pp-rev]]
+                (nest-in m (dropv (count path-parts) rel-pp) rel-pp-rev
                          (nest-group
                            rel-cols group col->idx col->info all-path-parts rel-pp rel-pk-cols)))
               (cu/zip-ordered-map
@@ -685,6 +688,9 @@
         path-parts (if col-agg?
                      []
                      (pop (cu/split-path col)))
+        path-parts-reverse (for [part path-parts]
+                             (when-let [chain (not-empty (-> part env :chain))]
+                               (some (comp :reverse :rel) chain)))
         qual (when-not col-agg?
                (cu/qualifier col))
         pk-cols (mapv #(cu/join-path qual %)
@@ -692,7 +698,7 @@
         basename (if col-agg?
                    col
                    (-> rp :resolved :value :name))]
-    [pk-cols path-parts basename]))
+    [pk-cols path-parts basename path-parts-reverse]))
 
 (defn nest [cols rows from-ent env]
   (let [col->idx (zipmap cols (range))
