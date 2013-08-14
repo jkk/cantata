@@ -512,6 +512,7 @@
     (reduce
       (fn [m [pk id]]
         (assoc m pk id))
+      m
       (map list pk id))
     (assoc m pk id)))
 
