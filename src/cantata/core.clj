@@ -213,7 +213,7 @@
 
 (def-dm-helpers
   entities entity rels rel fields field field-names shortcut shortcuts resolve-path
-  construct)
+  parse)
 
 ;;;;
 

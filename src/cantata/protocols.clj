@@ -7,142 +7,146 @@
 
 (set! *warn-on-reflection* true)
 
-;; For entity construction
+;; For entity parsing (from DB or other source)
 
-(defprotocol ToInt
-  (to-int [x]))
+(defprotocol ParseInt
+  (parse-int [x]))
 
-(extend-protocol ToInt
+(extend-protocol ParseInt
   Number
-  (to-int [x] (long x))
+  (parse-int [x] (long x))
   String
-  (to-int [x] (Long/valueOf x))
+  (parse-int [x] (Long/valueOf x))
   Character
-  (to-int [x] (Character/getNumericValue x))
+  (parse-int [x] (Character/getNumericValue x))
   java.util.Date
-  (to-int [x] (.getTime x))
+  (parse-int [x] (.getTime x))
   DateTime
-  (to-int [x] (.getMillis x))
+  (parse-int [x] (.getMillis x))
   LocalDate
-  (to-int [x] (.getTime ^java.util.Date (.toDate x)))
+  (parse-int [x] (.getTime ^java.util.Date (.toDate x)))
   nil
-  (to-int [_] nil))
+  (parse-int [_] nil))
 
-(defprotocol ToStr
-  (to-str [x]))
+(defprotocol ParseStr
+  (parse-str [x]))
 
-(extend-protocol ToStr
+(extend-protocol ParseStr
   String
-  (to-str [x] x)
+  (parse-str [x] x)
   java.sql.Clob
-  (to-str [x] (slurp (.getCharacterStream x)))
+  (parse-str [x] (slurp (.getCharacterStream x)))
   java.sql.Blob
-  (to-str [x] (to-str (.getBytes x 0 (.length x))))
+  (parse-str [x] (parse-str (.getBytes x 0 (.length x))))
   Character
-  (to-str [x] (str x))
+  (parse-str [x] (str x))
   Object
-  (to-str [x] (pr-str x)) ;NOT using str here
+  (parse-str [x] (pr-str x)) ;NOT using str here
   nil
-  (to-str [_] nil))
+  (parse-str [_] nil))
 
 (extend (Class/forName "[B") ;byte arrays
-  ToStr
-  {:to-str (fn [^"[B" x] (String. x "UTF-8"))})
+  ParseStr
+  {:parse-str (fn [^"[B" x] (String. x "UTF-8"))})
 
-(defprotocol ToDouble
-  (to-double [x]))
+(defprotocol ParseDouble
+  (parse-double [x]))
 
-(extend-protocol ToDouble
+(extend-protocol ParseDouble
   Number
-  (to-double [x] (double x))
+  (parse-double [x] (double x))
   String
-  (to-double [x] (Double/valueOf x))
+  (parse-double [x] (Double/valueOf x))
   Character
-  (to-double [x] (to-double (Character/getNumericValue x)))
+  (parse-double [x] (parse-double (Character/getNumericValue x)))
   nil
-  (to-double [_] nil))
+  (parse-double [_] nil))
 
-(defprotocol ToDecimal
-  (to-decimal [x]))
+(defprotocol ParseDecimal
+  (parse-decimal [x]))
 
-(extend-protocol ToDecimal
+(extend-protocol ParseDecimal
   Number
-  (to-decimal [x] (bigdec x))
+  (parse-decimal [x] (bigdec x))
   String
-  (to-decimal [x] (bigdec x))
+  (parse-decimal [x] (bigdec x))
   nil
-  (to-double [_] nil))
+  (parse-double [_] nil))
 
-(defprotocol ToBoolean
-  (to-boolean [x]))
+(defprotocol ParseBoolean
+  (parse-boolean [x]))
 
-(extend-protocol ToBoolean
+(extend-protocol ParseBoolean
   Number
-  (to-boolean [x] (not (zero? x)))
+  (parse-boolean [x] (not (zero? x)))
   String
-  (to-boolean [x] (Boolean/valueOf x))
+  (parse-boolean [x] (Boolean/valueOf x))
   nil
-  (to-boolean [_] nil))
+  (parse-boolean [_] nil))
 
-(defprotocol ToBytes
-  (to-bytes [x]))
+(defprotocol ParseBytes
+  (parse-bytes [x]))
 
-(extend-protocol ToBytes
+(extend-protocol ParseBytes
   String
-  (to-bytes [x] (.getBytes x "UTF-8"))
+  (parse-bytes [x] (.getBytes x "UTF-8"))
   java.sql.Blob
-  (to-bytes [x] (.getBytes x 0 (.length x)))
+  (parse-bytes [x] (.getBytes x 0 (.length x)))
   nil
-  (to-bytes [_] nil))
+  (parse-bytes [_] nil))
 
-(defprotocol ToDate
-  (to-date [x]))
+(extend (Class/forName "[B") ;byte arrays
+  ParseBytes
+  {:parse-bytes (fn [x] x)})
+
+(defprotocol ParseDate
+  (parse-date [x]))
 
 (def date-sdf (java.text.SimpleDateFormat. "yyyy-MM-dd"))
 
-(extend-protocol ToDate
+(extend-protocol ParseDate
   java.util.Date
-  (to-date [x] x)
+  (parse-date [x] x)
   String
-  (to-date [x] (.parse ^java.text.SimpleDateFormat date-sdf x))
+  (parse-date [x] (.parse ^java.text.SimpleDateFormat date-sdf x))
   Number
-  (to-date [x] (java.util.Date. (long x)))
+  (parse-date [x] (java.util.Date. (long x)))
   DateTime
-  (to-date [x] (.toDate x))
+  (parse-date [x] (.toDate x))
   LocalDate
-  (to-date [x] (.toDate x)))
+  (parse-date [x] (.toDate x)))
 
-(defprotocol ToTime
-  (to-time [x]))
+(defprotocol ParseTime
+  (parse-time [x]))
 
 (def time-sdf (java.text.SimpleDateFormat. "HH:mm:ss"))
 
-(extend-protocol ToTime
+(extend-protocol ParseTime
   java.util.Date
-  (to-time [x] x)
+  (parse-time [x] x)
   String
-  (to-time [x] (.parse ^java.text.SimpleDateFormat time-sdf x))
+  (parse-time [x] (.parse ^java.text.SimpleDateFormat time-sdf x))
   Number
-  (to-time [x] (java.util.Date. (long x)))
+  (parse-time [x] (java.util.Date. (long x)))
   DateTime
-  (to-time [x] (.toDate x))
+  (parse-time [x] (.toDate x))
   LocalTime
-  (to-time [x] (.toDate ^DateTime (.toDateTimeToday x))))
+  (parse-time [x] (.toDate ^DateTime (.toDateTimeToday x))))
 
-(defprotocol ToDatetime
-  (to-datetime [x]))
+(defprotocol ParseDatetime
+  (parse-datetime [x]))
 
-(extend-protocol ToDatetime
+(extend-protocol ParseDatetime
   java.util.Date
-  (to-datetime [x] x)
+  (parse-datetime [x] x)
   String
-  (to-datetime [x] (instant/read-instant-date x))
+  (parse-datetime [x] (instant/read-instant-date x))
   Number
-  (to-date [x] (java.util.Date. (long x)))
+  (parse-date [x] (java.util.Date. (long x)))
   DateTime
-  (to-date [x] (.toDate x))
+  (parse-date [x] (.toDate x))
   LocalDate
-  (to-date [x] (.toDate x)))
+  (parse-date [x] (.toDate x)))
 
 
 ;; For data-source-wide marshalling/unmarshalling. Implemented as protocols

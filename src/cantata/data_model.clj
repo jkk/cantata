@@ -250,12 +250,12 @@
 ;;;;
 
 ;; For custom types
-(defmulti construct-value (fn [v type] type))
+(defmulti parse-value (fn [v type] type))
 
-(defmethod construct-value :default [v type]
+(defmethod parse-value :default [v type]
   v)
 
-(defn construct
+(defn parse
   ([dm ename-or-ent values]
     (let [ent (if (keyword? ename-or-ent)
                 (entity dm ename-or-ent)
@@ -263,7 +263,7 @@
           [fnames values] (if (map? values)
                             [(keys values) (vals values)]
                             [(field-names ent) values])]
-      (construct dm ent fnames values)))
+      (parse dm ent fnames values)))
   ([dm ename-or-ent fnames values]
     (let [ent (if (keyword? ename-or-ent)
                 (entity dm ename-or-ent)
@@ -277,16 +277,16 @@
           (let [type (-> fname fields :type)
                 v* (try
                      (case type
-                       :int (cp/to-int v)
-                       :str (cp/to-str v)
-                       :boolean (cp/to-str v)
-                       :datetime (cp/to-datetime v)
-                       :date (cp/to-date v)
-                       :time (cp/to-time v)
-                       :double (cp/to-double v)
-                       :decimal (cp/to-decimal v)
-                       :bytes (cp/to-bytes v)
-                       (construct-value v type))
+                       :int (cp/parse-int v)
+                       :str (cp/parse-str v)
+                       :boolean (cp/parse-str v)
+                       :datetime (cp/parse-datetime v)
+                       :date (cp/parse-date v)
+                       :time (cp/parse-time v)
+                       :double (cp/parse-double v)
+                       :decimal (cp/parse-decimal v)
+                       :bytes (cp/parse-bytes v)
+                       (parse-value v type))
                      (catch Exception e
                        (let [msg (str "Failed to parse " fname
                                       " for entity " (:name ent))]
