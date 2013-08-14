@@ -264,7 +264,7 @@
   v)
 
 (defn parse
-  [ent fnames values & {:keys [joda-dates]}]
+  [ent fnames values & {:keys [joda-dates ordered-map]}]
   (let [fields (:fields ent)
         parse-datetime (if joda-dates
                          cp/parse-joda-datetime
@@ -275,7 +275,9 @@
         parse-time (if joda-dates
                      cp/parse-joda-time
                      cp/parse-time)]
-    (loop [m (om/ordered-map)
+    (loop [m (if ordered-map
+               (om/ordered-map)
+               {})
            [fname & fnames] fnames
            [v & values] values]
       (if-not fname
