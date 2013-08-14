@@ -212,8 +212,22 @@
                    (cds/get-data-model ~'ds) ~'args)))))
 
 (def-dm-helpers
-  entities entity rels rel fields field field-names shortcut shortcuts resolve-path
-  parse)
+  entities entity rels rel fields field field-names shortcut shortcuts resolve-path)
+
+(defn parse
+  ([ds ename-or-ent values]
+    (let [dm (cds/get-data-model ds)
+          ent (if (keyword? ename-or-ent)
+                (cdm/entity dm ename-or-ent)
+                ename-or-ent)
+          [fnames values] (if (map? values)
+                            [(keys values) (vals values)]
+                            [(cdm/field-names ent) values])]
+      (parse ds ent fnames values)))
+  ([ds ename-or-ent fnames values]
+    (let [dm (cds/get-data-model ds)
+          joda-dates? (:joda-dates (cds/get-options ds))]
+      (cdm/parse dm ename-or-ent fnames values :joda-dates joda-dates?))))
 
 ;;;;
 

@@ -7,8 +7,6 @@
 
 (set! *warn-on-reflection* true)
 
-;; For entity parsing (from DB or other source)
-
 (defprotocol ParseInt
   (parse-int [x]))
 
@@ -114,7 +112,22 @@
   DateTime
   (parse-date [x] (.toDate x))
   LocalDate
-  (parse-date [x] (.toDate x)))
+  (parse-date [x] (.toDate x))
+  nil
+  (parse-date [_] nil))
+
+(defprotocol ParseJodaDate
+  (parse-joda-date [x]))
+
+(extend-protocol ParseJodaDate
+  java.util.Date
+  (parse-joda-date [x] (LocalDate. (.getTime x) DateTimeZone/UTC))
+  String
+  (parse-joda-date [x] (LocalDate/parse x))
+  Number
+  (parse-joda-date [x] (LocalDate. (long x) DateTimeZone/UTC))
+  nil
+  (parse-joda-date [_] nil))
 
 (defprotocol ParseTime
   (parse-time [x]))
@@ -131,7 +144,22 @@
   DateTime
   (parse-time [x] (.toDate x))
   LocalTime
-  (parse-time [x] (.toDate ^DateTime (.toDateTimeToday x))))
+  (parse-time [x] (.toDate ^DateTime (.toDateTimeToday x)))
+  nil
+  (parse-time [_] nil))
+
+(defprotocol ParseJodaTime
+  (parse-joda-time [x]))
+
+(extend-protocol ParseJodaTime
+  java.util.Date
+  (parse-joda-time [x] (LocalTime. (.getTime x) DateTimeZone/UTC))
+  String
+  (parse-joda-time [x] (LocalTime/parse x))
+  Number
+  (parse-joda-time [x] (LocalTime. (long x) DateTimeZone/UTC))
+  nil
+  (parse-joda-time [_] nil))
 
 (defprotocol ParseDatetime
   (parse-datetime [x]))
@@ -142,11 +170,33 @@
   String
   (parse-datetime [x] (instant/read-instant-date x))
   Number
-  (parse-date [x] (java.util.Date. (long x)))
+  (parse-datetime [x] (java.util.Date. (long x)))
   DateTime
-  (parse-date [x] (.toDate x))
+  (parse-datetime [x] (.toDate x))
   LocalDate
-  (parse-date [x] (.toDate x)))
+  (parse-datetime [x] (.toDate x))
+  nil
+  (parse-datetime [_] nil))
+
+(defprotocol ParseJodaDatetime
+  (parse-joda-datetime [x]))
+
+(extend-protocol ParseJodaDatetime
+  java.util.Date
+  (parse-joda-datetime [x] (DateTime. (.getTime x) DateTimeZone/UTC))
+  String
+  (parse-joda-datetime [x] (DateTime.
+                             (.getTime
+                               ^java.util.Date (instant/read-instant-date x))
+                             DateTimeZone/UTC))
+  Number
+  (parse-joda-datetime [x] (DateTime. (long x) DateTimeZone/UTC))
+  DateTime
+  (parse-joda-datetime [x] x)
+  LocalDate
+  (parse-joda-datetime [x] (.toDateTimeAtStartOfDay x DateTimeZone/UTC))
+  nil
+  (parse-joda-datetime [_] nil))
 
 
 ;; For data-source-wide marshalling/unmarshalling. Implemented as protocols

@@ -80,6 +80,7 @@
                  dm
                  (cdm/data-model dm))))
         ds (assoc ds
+                  ::options opts
                   ::quoting (if (contains? opts :quoting)
                                  (:quoting opts)
                                  (detect-quoting ds))
@@ -101,6 +102,9 @@
 
 (defn get-data-model [ds]
   (::data-model (force ds)))
+
+(defn get-options [ds]
+  (::options (force ds)))
 
 (defn get-quoting [ds]
   (::quoting (force ds)))
