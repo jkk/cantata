@@ -545,10 +545,11 @@
         rm (first rms) ;one-to-one
         rpk (:pk rent)
         nrpk (cdm/normalize-pk rpk)
-        rid (if (and (= (count nrpk) (count rm))
-                     (cdm/pk-present? rm rpk))
-              (cdm/pk-val rm rpk)
-              (save! ds (:name rent) rm))
+        rid (when (seq rm)
+              (if (and (= (count nrpk) (count rm))
+                       (cdm/pk-present? rm rpk))
+                (cdm/pk-val rm rpk)
+                (save! ds (:name rent) rm)))
         pk (:pk ent)]
     (assoc-pk m (:key rel) rid)))
 

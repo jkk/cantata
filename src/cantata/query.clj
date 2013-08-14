@@ -626,7 +626,8 @@
   (if ks
     (let [nv (nest-in {} ks revs v)]
       (assoc m k (if rev? [nv] nv)))
-    (assoc m k (if (and (not rev?) (sequential? v) (= 1 (count v)))
+    (assoc m k (if (and (not rev?) (sequential? v) (or (= 0 (count v))
+                                                       (= 1 (count v))))
                  (first v)
                  v))))
 
