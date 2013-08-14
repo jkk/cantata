@@ -630,12 +630,16 @@
                  (first v)
                  v))))
 
-(defn build-result-map [fnames fvals]
-  ;; TODO: parse
-  (cu/zip-ordered-map fnames fvals))
+(defn build-result-map
+  ([fnames fvals]
+    (build-result-map fnames fvals false))
+  ([fnames fvals unordered?]
+    (if unordered?
+      (zipmap fnames fvals)
+      (cu/zip-ordered-map fnames fvals))))
 
 (defn ^:private nest-group
-  [cols rows col->idx col->info all-path-parts path-parts pk-cols]
+  [cols rows col->idx col->info all-path-parts unordered? path-parts pk-cols]
   (let [pp-len (count path-parts)
         cols* (if (empty? path-parts)
                 cols
@@ -654,7 +658,7 @@
       (throw-info ["Cannot nest: PK cols" pk-cols "not present in query results"]
                   {:pk-cols pk-cols :cols cols :path-parts path-parts}))
     (if (empty? rel-cols)
-      (mapv #(build-result-map own-basenames (map % own-idxs))
+      (mapv #(build-result-map own-basenames (map % own-idxs) unordered?)
             (filter #(every? % pk-idxs) ;nil PK = absent outer-joined row
                     (cu/distinct-key key-fn rows)))
       (let [next-infos (cu/distinct-key
@@ -676,8 +680,9 @@
               (fn [m [rel-pk-cols rel-pp _ rel-pp-rev]]
                 (nest-in m (dropv (count path-parts) rel-pp) rel-pp-rev
                          (nest-group
-                           rel-cols group col->idx col->info all-path-parts rel-pp rel-pk-cols)))
-              (build-result-map own-basenames (map (first group) own-idxs))
+                           rel-cols group col->idx col->info
+                           all-path-parts unordered? rel-pp rel-pk-cols)))
+              (build-result-map own-basenames (map (first group) own-idxs) unordered?)
               next-infos)))))))
 
 (defn ^:private get-rp-pk [resolved-path default-pk]
@@ -703,9 +708,12 @@
                    (-> rp :resolved :value :name))]
     [pk-cols path-parts basename path-parts-reverse]))
 
-(defn nest [cols rows from-ent env]
-  (let [col->idx (zipmap cols (range))
-        from-pk (:pk from-ent)
-        col->info (zipmap cols (map #(get-col-info from-pk env %) cols))
-        all-path-parts (set (map #(nth % 1) (vals col->info)))]
-    (nest-group cols rows col->idx col->info all-path-parts [] [from-pk])))
+(defn nest
+  ([cols rows from-ent env]
+    (nest cols rows from-ent env false))
+  ([cols rows from-ent env unordered?]
+    (let [col->idx (zipmap cols (range))
+          from-pk (:pk from-ent)
+          col->info (zipmap cols (map #(get-col-info from-pk env %) cols))
+          all-path-parts (set (map #(nth % 1) (vals col->info)))]
+      (nest-group cols rows col->idx col->info all-path-parts unordered? [] [from-pk]))))

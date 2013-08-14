@@ -42,12 +42,14 @@
   ([ds q body-fn]
     (with-query-maps* ds q nil body-fn))
   ([ds q opts body-fn]
-    (apply sql/query (force ds) (cds/get-data-model ds) q
-           (fn [cols rows]
-             (body-fn (map #(cq/build-result-map cols %) rows)))
-           (if (map? opts)
-             (apply concat opts)
-             opts))))
+    (let [unordered? (cds/get-option ds :unordered-maps)]
+      (apply sql/query (force ds) (cds/get-data-model ds) q
+             (fn [cols rows]
+               (body-fn (map #(cq/build-result-map cols % unordered?)
+                             rows)))
+             (if (map? opts)
+               (apply concat opts)
+               opts)))))
 
 (defmacro with-query-maps [maps ds q & body]
   `(with-query-maps* ~ds ~q (fn [~maps]
@@ -64,9 +66,10 @@
 
 ;; TODO: version that works on arbitrary vector/map data, sans env
 (defn nest
-  ([cols rows]
+  ([cols rows & {:keys [unordered]}]
     (with-meta
-      (cq/nest cols rows (get-query-from cols) (get-query-env cols))
+      (cq/nest cols rows
+               (get-query-from cols) (get-query-env cols) (boolean unordered))
       (meta cols))))
 
 ;;
@@ -78,23 +81,25 @@
 ;;
 
 (defn flat-query [ds q & {:keys [vectors] :as opts}]
-  (with-query-rows* ds q opts
-    (fn [cols rows]
-      (if vectors
-        [cols rows]
-        (with-meta
-          (mapv #(cq/build-result-map cols %) rows)
-          (meta cols))))))
+  (let [unordered? (cds/get-option ds :unordered-maps)]
+    (with-query-rows* ds q opts
+      (fn [cols rows]
+        (if vectors
+          [cols rows]
+          (with-meta
+            (mapv #(cq/build-result-map cols % unordered?) rows)
+            (meta cols)))))))
 
 (defn flat-query1 [ds q & {:keys [vectors] :as opts}]
-  (with-query-rows* ds (sql/add-limit-1 q) opts
-    (fn [cols rows]
-      (if vectors
-        [cols (first rows)]
-        (when (first rows)
-          (with-meta
-            (cq/build-result-map cols (first rows))
-            (meta cols)))))))
+  (let [unordered? (cds/get-option ds :unordered-maps)]
+    (with-query-rows* ds (sql/add-limit-1 q) opts
+      (fn [cols rows]
+        (if vectors
+          [cols (first rows)]
+          (when (first rows)
+            (with-meta
+              (cq/build-result-map cols (first rows) unordered?)
+              (meta cols))))))))
 
 (defn query* [ds q & opts]
   (when (sql/plain-sql? q)
@@ -102,7 +107,7 @@
   ;; TODO: implicitly add/remove PKs if necessary? :force-pk opt?
   (with-query-rows* ds q opts
     (fn [cols rows]
-      (nest cols rows))))
+      (nest cols rows :unordered (cds/get-option ds :unordered-maps)))))
 
 (defn query1* [ds q & opts]
   (let [ms (apply query* ds (sql/add-limit-1 q) opts)]
@@ -226,7 +231,7 @@
       (parse ds ent fnames values)))
   ([ds ename-or-ent fnames values]
     (let [dm (cds/get-data-model ds)
-          joda-dates? (:joda-dates (cds/get-options ds))]
+          joda-dates? (cds/get-option ds :joda-dates)]
       (cdm/parse dm ename-or-ent fnames values :joda-dates joda-dates?))))
 
 ;;;;

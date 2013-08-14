@@ -106,6 +106,9 @@
 (defn get-options [ds]
   (::options (force ds)))
 
+(defn get-option [ds opt & [default]]
+  (opt (::options (force ds)) default))
+
 (defn get-quoting [ds]
   (::quoting (force ds)))
 
