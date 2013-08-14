@@ -269,7 +269,7 @@
                 (entity dm ename-or-ent)
                 ename-or-ent)
           fields (:fields ent)]
-      (loop [m {}
+      (loop [m (om/ordered-map)
              [fname & fnames] fnames
              [v & values] values]
         (if-not fname
