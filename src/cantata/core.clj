@@ -633,3 +633,40 @@
       (if (false? (:save-rels opts))
         (save-m ds ent own-m)
         (save-m-rels ds dm ent own-m values)))))
+
+;;;;
+
+(defn merge-and-delete!
+  "Updates all records that point to id-to-merge, merges any values
+  not already present in id-to-keep, then deletes id-to-merge."
+  [ds ename id-to-keep id-to-merge]
+  (when-let [keep-m (merge
+                      (by-id ds ename id-to-merge)
+                      (by-id ds ename id-to-keep))]
+    (save! ds ename keep-m)
+    (let [dm (cds/get-data-model ds)
+          ent (cdm/entity dm ename)
+          pk (:pk ent)
+          npk (cdm/normalize-pk pk)
+          deps (cdm/dependent-graph dm)]
+      (doseq [[dep-name dep-rel] (deps ename)]
+        (let [dep-ent (cdm/entity dm dep-name)
+              dep-pk (:pk dep-ent)
+              other-rk (vec (for [k (cdm/normalize-pk (:other-key dep-rel))]
+                              (cu/join-path (:name dep-rel) k)))
+              other-pk (vec (for [k npk]
+                              (cu/join-path (:name dep-rel) k)))
+              mod-ms (flat-query
+                       ds [:from dep-name
+                           :select (cdm/normalize-pk dep-pk)
+                           :where [:and
+                                   (build-key-pred (:key dep-rel) other-rk)
+                                   (build-key-pred other-pk id-to-merge)]])]
+          (doseq [mod-m mod-ms]
+            (let [dep-id (cdm/pk-val mod-m dep-pk)]
+              (if (= dep-pk (:key dep-rel))
+                (merge-and-delete! ds dep-name id-to-keep dep-id)
+                (update! ds dep-name
+                         (assoc-pk {} (:key dep-rel) id-to-keep)
+                         (build-key-pred dep-pk dep-id))))))))
+    (delete-ids! ds ename id-to-merge)))
