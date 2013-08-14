@@ -117,7 +117,6 @@
       specs)))
 
 (defn data-model [entity-specs]
-  ;; TODO: enforce naming uniqueness
   (let [entity-specs (normalize-entity-specs entity-specs)]
     (when-let [bad-spec (first (remove map? entity-specs))]
       (throw-info ["Invalid entity spec:" bad-spec]
@@ -506,16 +505,22 @@
             (throw-info ["Invalid entity name" (:ename rel)
                          "in rel" (:name rel) "in entity" (:name ent)]
                         {:rel rel :entity ent}))
+          (when-let [rname (:name rel)]
+            (or (empty? (fields ent))
+                (not (field ent rname))
+                (throw-info ["Rel name" rname "conflicts with field name"
+                             "in entity" (:name ent)]
+                            {:rel rel :entity ent})))
           (when-let [key (:key rel)]
             (or (resolve ent key)
                 (empty? (fields ent))
-                (throw-info ["Invalid rel :key" key
+                (throw-info ["No field matching rel key" key
                              "in rel" (:name rel) "in entity" (:name ent)]
                             {:rel rel :entity ent})))
           (when-let [other-key (:other-key rel)]
             (or (resolve rent other-key)
                 (empty? (fields rent))
-                (throw-info ["Invalid rel :other-key" key
+                (throw-info ["No field matching rel other-key" other-key
                              "in rel" (:name rel) "in entity" (:name ent)]
                             {:rel rel :entity ent})))))))
   dm)
