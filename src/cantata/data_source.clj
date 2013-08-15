@@ -78,7 +78,7 @@
              (when dm
                (if (cdm/data-model? dm)
                  dm
-                 (cdm/data-model dm))))
+                 (cdm/make-data-model dm))))
         ds (assoc ds
                   ::options opts
                   ::quoting (if (contains? opts :quoting)

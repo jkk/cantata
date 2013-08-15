@@ -116,7 +116,7 @@
         (assoc v :name k))
       specs)))
 
-(defn data-model [entity-specs]
+(defn make-data-model [entity-specs]
   (let [entity-specs (normalize-entity-specs entity-specs)]
     (when-let [bad-spec (first (remove map? entity-specs))]
       (throw-info ["Invalid entity spec:" bad-spec]
@@ -151,7 +151,7 @@
       (merge (first (g1 name)) (first (g2 name))))))
 
 (defn reflect-data-model [ds entity-specs & opts]
-  (data-model
+  (make-data-model
     (let [especs (merge-entity-specs
                    (apply reflect/reflect-entities ds opts)
                    (normalize-entity-specs entity-specs))]

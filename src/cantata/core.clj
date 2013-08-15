@@ -8,21 +8,13 @@
             [clojure.java.jdbc :as jd]
             [flatland.ordered.map :as om]))
 
-(defn data-model
-  "Creates and returns a data model."
-  [entity-specs]
-  (cdm/data-model entity-specs))
-
-(defn reflect-data-model [ds entity-specs & opts]
-  (apply cdm/reflect-data-model (force ds) entity-specs opts))
-
 (defn data-source [db-spec & model+opts]
   (apply cds/data-source db-spec model+opts))
 
-(defn build-query [& qargs]
+(defn buildq [& qargs]
   (apply cq/build-query qargs))
 
-(defn merge-query [q & qargs]
+(defn mergeq [q & qargs]
   (apply cq/build-query q qargs))
 
 (defn with-query-rows*
@@ -60,8 +52,8 @@
   ([x k]
     (k (::query (meta x)))))
 
-;; TODO: version that works on arbitrary vector/map data, sans env
-(defn nest
+;; TODO: public version that works on arbitrary vector/map data, sans meta data
+(defn ^:private nest
   ([cols rows & {:keys [ds-opts]}]
     (let [{:keys [from env added-paths]} (query-meta cols)
           opts (merge ds-opts
@@ -70,20 +62,20 @@
         (cq/nest cols rows from env opts)
         (meta cols)))))
 
-;;
-;; QUERY CHOICES
-;; * As nested maps, single query     - (query ...)
-;; * As nested maps, multiple queries - (querym ...)
-;; * As flat maps, single query       - (query ... :flat true)
-;; * As vectors, single query         - (query ... :vectors true)
-;;
-
 (defn ^:private flat-query [ds q & [{:keys [vectors] :as opts}]]
   (if vectors
     (with-query-rows* ds q opts
       (fn [cols rows]
         [cols rows]))
     (with-query-maps* ds q opts identity)))
+
+;;
+;; QUERY CHOICES
+;; * As nested maps, single query     -> (query ...)
+;; * As nested maps, multiple queries -> (querym ...)
+;; * As flat maps, single query       -> (query ... :flat true)
+;; * As vectors, single query         -> (query ... :vectors true)
+;;
 
 (defn query [ds q & {:keys [flat vectors force-pk] :as opts}]
   (if (or flat vectors (sql/plain-sql? q))
@@ -111,111 +103,6 @@
                   opts)]
     (when-let [m (first ms)]
       (with-meta m (meta ms)))))
-
-(defmacro with-transaction [binding & body]
-  (let [[ds-sym ds] (if (symbol? binding)
-                      [binding binding]
-                      binding)]
-    `(jd/db-transaction [~ds-sym (force ~ds)] ~@body)))
-
-(defmacro rollback! [ds]
-  `(jd/db-set-rollback-only! ~ds))
-
-(defmacro unset-rollback! [ds]
-  `(jd/db-unset-rollback-only! ~ds))
-
-(defmacro rollback? [ds]
-  `(jd/db-is-rollback-only ~ds))
-
-(defmacro with-rollback [binding & body]
-  (let [[ds-sym ds] (if (symbol? binding)
-                      [binding binding]
-                      binding)]
-    `(with-transaction [~ds-sym ~ds]
-       (rollback! ~ds-sym)
-       ~@body)))
-
-(defmacro verbose
-  "Causes any wrapped queries or statements to print lots of logging
-  information during execution. See also 'debug'"
-  [& body]
-  `(binding [cu/*verbose* true]
-     (with-redefs [jd/db-do-prepared sql/db-do-prepared-hook
-                   jd/db-do-prepared-return-keys sql/db-do-prepared-return-keys-hook]
-       ~@body)))
-
-(defmacro with-debug
-  "Starts a transaction which will be rolled back when it ends, and prints
-  verbose information about all database activity.
-
-  WARNING: The underlying data source must actually support rollbacks. If it
-  doesn't, changes may be permanently committed."
-  [binding & body]
-  `(verbose
-     (with-rollback ~binding
-       ~@body)))
-
-(defn expand-query [ds-or-dm q & opts]
-  (let [[ds dm] (if (cdm/data-model? ds-or-dm)
-                  [nil ds-or-dm]
-                  [ds-or-dm nil])
-        dm (or dm (cds/get-data-model ds))]
-    (apply cq/expand-query dm q opts)))
-
-(defn to-sql [ds-or-dm q & opts]
-  (let [[ds dm] (if (cdm/data-model? ds-or-dm)
-                  [nil ds-or-dm]
-                  [ds-or-dm nil])
-        dm (or dm (cds/get-data-model ds))]
-    (apply sql/to-sql q
-           :data-model dm
-           :quoting (when ds (cds/get-quoting ds))
-           opts)))
-
-(defn prepare [ds q & opts]
-  (apply sql/prepare (force ds) (cds/get-data-model ds) q opts))
-
-;;;;
-
-(defmacro ^:private def-dm-helpers [& fn-names]
-  `(do
-     ~@(for [fn-name fn-names]
-         `(defn ~fn-name [~'ds ~'& ~'args]
-            (apply ~(symbol "cdm" (name fn-name))
-                   (cds/get-data-model ~'ds) ~'args)))))
-
-(def-dm-helpers
-  entities entity rels rel fields field field-names shortcut shortcuts
-  validate! resolve-path)
-
-(defn parse
-  ([ds ename-or-ent values]
-    (let [dm (cds/get-data-model ds)
-          ent (if (keyword? ename-or-ent)
-                (cdm/entity dm ename-or-ent)
-                ename-or-ent)
-          [fnames values] (if (map? values)
-                            [(keys values) (vals values)]
-                            [(cdm/field-names ent) values])]
-      (parse ds ent fnames values)))
-  ([ds ename-or-ent fnames values]
-    (let [dm (cds/get-data-model ds)
-          ent (if (keyword? ename-or-ent)
-                (cdm/entity dm ename-or-ent)
-                ename-or-ent)
-          joda-dates? (cds/get-option ds :joda-dates)]
-      (cdm/parse ent fnames values :joda-dates joda-dates?))))
-
-(defn problem
-  ([keys-or-msg]
-    (let [[keys msg] (if (sequential? keys-or-msg)
-                        [keys-or-msg]
-                        [nil keys-or-msg])]
-      (problem keys msg)))
-  ([keys msg]
-    (r/->ValidationProblem keys msg)))
-
-;;;;
 
 (defn getf
   "Fetches one or more nested field values from the given query result or
@@ -274,6 +161,113 @@
 
 (defn queryf1 [ds q & opts]
   (first (apply queryf ds q opts)))
+
+;;;;
+
+(defn expand-query [ds-or-dm q & opts]
+  (let [[ds dm] (if (cdm/data-model? ds-or-dm)
+                  [nil ds-or-dm]
+                  [ds-or-dm nil])
+        dm (or dm (cds/get-data-model ds))]
+    (apply cq/expand-query dm q opts)))
+
+(defn to-sql [ds-or-dm q & opts]
+  (let [[ds dm] (if (cdm/data-model? ds-or-dm)
+                  [nil ds-or-dm]
+                  [ds-or-dm nil])
+        dm (or dm (cds/get-data-model ds))]
+    (apply sql/to-sql q
+           :data-model dm
+           :quoting (when ds (cds/get-quoting ds))
+           opts)))
+
+(defn prepare [ds q & opts]
+  (apply sql/prepare (force ds) (cds/get-data-model ds) q opts))
+
+;;;;
+
+(defmacro with-transaction [binding & body]
+  (let [[ds-sym ds] (if (symbol? binding)
+                      [binding binding]
+                      binding)]
+    `(jd/db-transaction [~ds-sym (force ~ds)] ~@body)))
+
+(defmacro rollback! [ds]
+  `(jd/db-set-rollback-only! ~ds))
+
+(defmacro unset-rollback! [ds]
+  `(jd/db-unset-rollback-only! ~ds))
+
+(defmacro rollback? [ds]
+  `(jd/db-is-rollback-only ~ds))
+
+(defmacro with-rollback [binding & body]
+  (let [[ds-sym ds] (if (symbol? binding)
+                      [binding binding]
+                      binding)]
+    `(with-transaction [~ds-sym ~ds]
+       (rollback! ~ds-sym)
+       ~@body)))
+
+(defmacro verbose
+  "Causes any wrapped queries or statements to print lots of logging
+  information during execution. See also 'debug'"
+  [& body]
+  `(binding [cu/*verbose* true]
+     (with-redefs [jd/db-do-prepared sql/db-do-prepared-hook
+                   jd/db-do-prepared-return-keys sql/db-do-prepared-return-keys-hook]
+       ~@body)))
+
+(defmacro with-debug
+  "Starts a transaction which will be rolled back when it ends, and prints
+  verbose information about all database activity.
+
+  WARNING: The underlying data source must actually support rollbacks. If it
+  doesn't, changes may be permanently committed."
+  [binding & body]
+  `(verbose
+     (with-rollback ~binding
+       ~@body)))
+
+;;;;
+
+(defmacro ^:private def-dm-helpers [& fn-names]
+  `(do
+     ~@(for [fn-name fn-names]
+         `(defn ~fn-name [~'ds ~'& ~'args]
+            (apply ~(symbol "cdm" (name fn-name))
+                   (cds/get-data-model ~'ds) ~'args)))))
+
+(def-dm-helpers
+  entities entity rels rel fields field field-names shortcut shortcuts
+  validate! resolve-path)
+
+(defn parse
+  ([ds ename-or-ent values]
+    (let [dm (cds/get-data-model ds)
+          ent (if (keyword? ename-or-ent)
+                (cdm/entity dm ename-or-ent)
+                ename-or-ent)
+          [fnames values] (if (map? values)
+                            [(keys values) (vals values)]
+                            [(cdm/field-names ent) values])]
+      (parse ds ent fnames values)))
+  ([ds ename-or-ent fnames values]
+    (let [dm (cds/get-data-model ds)
+          ent (if (keyword? ename-or-ent)
+                (cdm/entity dm ename-or-ent)
+                ename-or-ent)
+          joda-dates? (cds/get-option ds :joda-dates)]
+      (cdm/parse ent fnames values :joda-dates joda-dates?))))
+
+(defn problem
+  ([keys-or-msg]
+    (let [[keys msg] (if (sequential? keys-or-msg)
+                        [keys-or-msg]
+                        [nil keys-or-msg])]
+      (problem keys msg)))
+  ([keys msg]
+    (r/->ValidationProblem keys msg)))
 
 ;;;;
 
