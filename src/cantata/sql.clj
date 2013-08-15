@@ -240,10 +240,10 @@
                                 :identifiers dasherize
                                 :row-fn row-fn
                                 :as-arrays? true)
-        qmeta {:cantata.core/query-from from-ent
-               :cantata.core/query-env env
-               :cantata.core/query-expanded eq
-               :cantata.core/query-added-paths added-paths}]
+        qmeta {:cantata.core/query {:from from-ent
+                                    :env env
+                                    :expanded eq
+                                    :added-paths added-paths}}]
     (callback (with-meta cols qmeta)
               rows)))
 

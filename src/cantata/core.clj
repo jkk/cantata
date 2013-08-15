@@ -54,25 +54,18 @@
   `(with-query-maps* ~ds ~q (fn [~maps]
                               ~@body)))
 
-(defn get-query-env [x]
-  (::query-env (meta x)))
-
-(defn get-query-from [x]
-  (::query-from (meta x)))
-
-(defn get-query-expanded [x]
-  (::query-expanded (meta x)))
-
-(defn get-query-added-paths [x]
-  (::query-added-paths (meta x)))
+(defn query-meta
+  ([x]
+    (::query (meta x)))
+  ([x k]
+    (k (::query (meta x)))))
 
 ;; TODO: version that works on arbitrary vector/map data, sans env
 (defn nest
   ([cols rows & {:keys [ds-opts]}]
-    (let [from (get-query-from cols)
-          env (get-query-env cols)
+    (let [{:keys [from env added-paths]} (query-meta cols)
           opts (merge ds-opts
-                      {:added-paths (set (get-query-added-paths cols))})]
+                      {:added-paths (set added-paths)})]
       (with-meta
         (cq/nest cols rows from env opts)
         (meta cols)))))
@@ -273,7 +266,7 @@
 
 (defn queryf [ds q & opts]
   (let [res (apply query ds q opts)
-        env (get-query-env res)
+        env (query-meta res :env)
         f1name (cq/first-select-field q)]
     (if (= f1name (-> f1name env :root :name))
       res
@@ -375,9 +368,7 @@
                      pk pk? npk maps many-results select-paths)))]
     (with-meta
       maps
-      {::query-from ent
-       ::query-env env
-       ::query-expanded eq}))))
+      {::query {:from ent :env env :expanded eq}}))))
 
 ;;;;
 
