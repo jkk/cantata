@@ -524,11 +524,23 @@
             (peek (first (filter seq quals)))))
       (first (:select q))))
 
+(defn force-pks [ent eq env]
+  (if (not-any? (comp #(some (comp :reverse :rel) %) :chain)
+                (vals env))
+    [eq env] ;don't bother if there are no to-many rels
+    (let [npk (dm/normalize-pk (:pk ent))
+          select (:select eq)
+          add-pks (remove (set select) npk)
+          eq (if (seq add-pks)
+               (assoc eq :select (concat select add-pks))
+               eq)]
+      [eq env add-pks])))
+
 ;; FIXME: need nested environments for subqueries to work
 (defn expand-query
   "Prepares a query for execution by expanding wildcard fields, implicit joins,
   and subqueries. Returns the transformed query and a map of resolved paths."
-  [dm qargs & {:keys [expand-joins env] :or {expand-joins true}}]
+  [dm qargs & {:keys [expand-joins env force-pk] :or {expand-joins true}}]
   (let [q (apply build-query (if (map? qargs) [qargs] qargs))
         q (if (:select q) q (assoc q :select [:*]))
         from (or (get-from q)
@@ -570,7 +582,9 @@
         ;subqs (filter map? fields)
         ;q (expand-subqueries dm q subqs env)
         ]
-    [q env]))
+    (if force-pk
+      (force-pks ent q env)
+      [q env])))
 
 (defn first-select-field [q]
   (let [select (if (sequential? q)
@@ -648,14 +662,14 @@
 
 (defn build-result-map
   ([fnames fvals]
-    (build-result-map fnames fvals false))
-  ([fnames fvals ds-opts]
-    (if (:unordered-maps ds-opts)
+    (build-result-map fnames fvals nil))
+  ([fnames fvals opts]
+    (if (:unordered-maps opts)
       (zipmap fnames fvals)
       (cu/zip-ordered-map fnames fvals))))
 
 (defn ^:private nest-group
-  [cols rows col->idx col->info all-path-parts ds-opts path-parts pk-cols]
+  [cols rows col->idx col->info all-path-parts opts path-parts pk-cols]
   (let [pp-len (count path-parts)
         cols* (if (empty? path-parts)
                 cols
@@ -664,17 +678,18 @@
         [own-cols rel-cols] ((juxt filter remove)
                               #(= path-parts (nth (col->info %) 1))
                               cols*)
-        own-idxs (map col->idx own-cols)
-        own-basenames (map #(nth (col->info %) 2) own-cols)
         pk-idxs	(keep col->idx pk-cols)
-        key-fn (get-key-fn pk-idxs own-idxs)]
+        key-fn (get-key-fn pk-idxs (map col->idx own-cols))
+        own-cols (remove (:added-pks opts) own-cols)
+        own-idxs (map col->idx own-cols)
+        own-basenames (map #(nth (col->info %) 2) own-cols)]
     ;; Having this makes nesting/distincting reliable, but also makes queries
     ;; more tedious to write
     #_(when (or (empty? pk-idxs) (not-every? identity pk-idxs))
       (throw-info ["Cannot nest: PK cols" pk-cols "not present in query results"]
                   {:pk-cols pk-cols :cols cols :path-parts path-parts}))
     (if (empty? rel-cols)
-      (mapv #(build-result-map own-basenames (map % own-idxs) ds-opts)
+      (mapv #(build-result-map own-basenames (map % own-idxs) opts)
             (filter #(every? % pk-idxs) ;nil PK = absent outer-joined row
                     (cu/distinct-key key-fn rows)))
       (let [next-infos (cu/distinct-key
@@ -705,8 +720,8 @@
                   (nest-in m nest-pp nest-pp-rev
                            (nest-group
                              rel-cols group col->idx col->info
-                             all-path-parts ds-opts rel-pp rel-pk-cols))))
-              (build-result-map own-basenames (map (first group) own-idxs) ds-opts)
+                             all-path-parts opts rel-pp rel-pk-cols))))
+              (build-result-map own-basenames (map (first group) own-idxs) opts)
               next-infos)))))))
 
 (defn ^:private get-rp-pk [resolved-path default-pk]
@@ -739,10 +754,10 @@
 
 (defn nest
   ([cols rows from-ent env]
-    (nest cols rows from-ent env false))
-  ([cols rows from-ent env ds-opts]
+    (nest cols rows from-ent env nil))
+  ([cols rows from-ent env opts]
     (let [col->idx (zipmap cols (range))
           from-pk (:pk from-ent)
           col->info (zipmap cols (map #(get-col-info from-pk env %) cols))
           all-path-parts (set (map #(nth % 1) (vals col->info)))]
-      (nest-group cols rows col->idx col->info all-path-parts ds-opts [] [from-pk]))))
+      (nest-group cols rows col->idx col->info all-path-parts opts [] [from-pk]))))

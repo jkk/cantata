@@ -8,7 +8,9 @@
             [clojure.java.jdbc :as jd]
             [flatland.ordered.map :as om]))
 
-(defn data-model [entity-specs]
+(defn data-model
+  "Creates and returns a data model."
+  [entity-specs]
   (cdm/data-model entity-specs))
 
 (defn reflect-data-model [ds entity-specs & opts]
@@ -61,13 +63,17 @@
 (defn get-query-expanded [x]
   (::query-expanded (meta x)))
 
+(defn get-query-added-pks [x]
+  (::query-added-pks (meta x)))
+
 ;; TODO: version that works on arbitrary vector/map data, sans env
 (defn nest
   ([cols rows & {:keys [ds-opts]}]
     (let [from (get-query-from cols)
-          env (get-query-env cols)]
+          env (get-query-env cols)
+          opts (merge ds-opts {:added-pks (set (get-query-added-pks cols))})]
       (with-meta
-        (cq/nest cols rows from env ds-opts)
+        (cq/nest cols rows from env opts)
         (meta cols)))))
 
 ;;
@@ -79,12 +85,11 @@
 ;;
 
 (defn ^:private flat-query [ds q & [{:keys [vectors] :as opts}]]
-  (let [ds-opts (cds/get-options ds)]
-    (if vectors
-      (with-query-rows* ds q opts
-        (fn [cols rows]
-          [cols rows]))
-      (with-query-maps* ds q opts identity))))
+  (if vectors
+    (with-query-rows* ds q opts
+      (fn [cols rows]
+        [cols rows]))
+    (with-query-maps* ds q opts identity)))
 
 (defn query [ds q & {:keys [flat vectors force-pk] :as opts}]
   (if (or flat vectors (sql/plain-sql? q))

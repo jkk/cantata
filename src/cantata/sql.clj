@@ -188,10 +188,10 @@
 
 ;; TODO: prepared statements; need a way to manage open/close scope;
 ;; maybe piggyback on transaction scope?
-(defn prepare [ds dm q & {:keys [expanded env] :as opts}]
-  (let [[eq env] (if (or expanded (plain-sql? q))
-                   [q env]
-                   (cq/expand-query dm q))
+(defn prepare [ds dm q & {:keys [expanded env force-pk] :as opts}]
+  (let [[eq env added-pks] (if (or expanded (plain-sql? q))
+                             [q env]
+                             (cq/expand-query dm q :force-pk (not (false? force-pk))))
         [sql] (apply to-sql eq
                      :data-model dm
                      :quoting (cds/get-quoting ds)
@@ -199,7 +199,7 @@
                      :env env
                      (apply concat opts))
         param-names (map cq/param-name (filter cq/param? (keys env)))]
-    (r/->PreparedQuery eq env sql param-names)))
+    (r/->PreparedQuery eq env sql param-names added-pks)))
 
 (defn dasherize [s]
   (string/replace s #"(?<!^|\.)_" "-"))
@@ -219,12 +219,12 @@
               ds-unmarshal))
       ds-unmarshal)))
 
-(defn query [ds dm q callback & {:keys [expanded env params]}]
+(defn query [ds dm q callback & {:keys [expanded env params force-pk]}]
   (let [prepped? (prepared? q)
-        [eq env] (cond
-                   prepped? [(:expanded-query q) (:env q)]
-                   (or expanded (plain-sql? q)) [q env]
-                   :else (cq/expand-query dm q))
+        [eq env added-pks] (cond
+                             prepped? [(:expanded-query q) (:env q) (:added-pks q)]
+                             (or expanded (plain-sql? q)) [q env]
+                             :else (cq/expand-query dm q :force-pk force-pk))
         sql-params (if prepped?
                      (into [(:sql q)] (map #(get params %) (:param-names q)))
                      (to-sql eq
@@ -242,7 +242,8 @@
                                 :as-arrays? true)
         qmeta {:cantata.core/query-from from-ent
                :cantata.core/query-env env
-               :cantata.core/query-expanded eq}]
+               :cantata.core/query-expanded eq
+               :cantata.core/query-added-pks added-pks}]
     (callback (with-meta cols qmeta)
               rows)))
 
