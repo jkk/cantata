@@ -331,7 +331,8 @@
                    (catch Exception e
                      (throw-info
                        ["Failed to parse" fname "for entity" (:name ent)]
-                       {:problems [{:keys [fname] :msg "Invalid value"}]})))
+                       {:problems [{:keys [fname] :msg "Invalid value"}]
+                        :value v})))
               m* (assoc m fname v*)]
           (recur m* fnames values))))))
 
@@ -348,7 +349,8 @@
                          ["Failed to parse" (nth cols idx)
                           "for entity" (:name ent)]
                          {:problems [{:keys [(nth cols idx)]
-                                      :msg "Invalid value"}]})))])))]
+                                      :msg "Invalid value"}]
+                          :value %})))])))]
     (fn [row]
       (reduce
         (fn [row [idx parser]]
