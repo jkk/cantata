@@ -80,19 +80,16 @@
 
 (defn ^:private flat-query [ds q & [{:keys [vectors] :as opts}]]
   (let [ds-opts (cds/get-options ds)]
-    (with-query-rows* ds q opts
-      (fn [cols rows]
-        (if vectors
-          [cols rows]
-          (with-meta
-            (mapv #(cq/build-result-map cols % ds-opts) rows)
-            (meta cols)))))))
+    (if vectors
+      (with-query-rows* ds q opts
+        (fn [cols rows]
+          [cols rows]))
+      (with-query-maps* ds q opts identity))))
 
-(defn query [ds q & {:keys [flat vectors] :as opts}]
+(defn query [ds q & {:keys [flat vectors force-pk] :as opts}]
   (if (or flat vectors (sql/plain-sql? q))
     (flat-query ds q opts)
-    ;; TODO: implicitly add/remove PKs if necessary? :force-pk opt?
-    (with-query-rows* ds q opts
+    (with-query-rows* ds q (assoc opts :force-pk (not (false? force-pk)))
       (fn [cols rows]
         (nest cols rows :ds-opts (cds/get-options ds))))))
 
