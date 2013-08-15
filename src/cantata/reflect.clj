@@ -27,6 +27,12 @@
 (defn ^:private ^DatabaseMetaData get-db-meta [ds]
   (.getMetaData ^Connection (:connection ds)))
 
+(defn reflect-catalogs [ds]
+  (jd/db-transaction
+    [ds ds]
+    (get-results
+      (.getCatalogs (get-db-meta ds)))))
+
 (defn reflect-tables [ds]
   (jd/db-transaction
     [ds ds]
