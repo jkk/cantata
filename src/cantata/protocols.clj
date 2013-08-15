@@ -11,6 +11,8 @@
   (parse-int [x]))
 
 (extend-protocol ParseInt
+  Long
+  (parse-int [x] x)
   Number
   (parse-int [x] (long x))
   String
@@ -51,6 +53,8 @@
   (parse-double [x]))
 
 (extend-protocol ParseDouble
+  Double
+  (parse-double [x] x)
   Number
   (parse-double [x] (double x))
   String
@@ -64,6 +68,8 @@
   (parse-decimal [x]))
 
 (extend-protocol ParseDecimal
+  BigDecimal
+  (parse-decimal [x] x)
   Number
   (parse-decimal [x] (bigdec x))
   String
@@ -75,6 +81,8 @@
   (parse-boolean [x]))
 
 (extend-protocol ParseBoolean
+  Boolean
+  (parse-boolean [x] x)
   Number
   (parse-boolean [x] (not (zero? x)))
   String
@@ -120,6 +128,10 @@
   (parse-joda-date [x]))
 
 (extend-protocol ParseJodaDate
+  LocalDate
+  (parse-joda-date [x] x)
+  DateTime
+  (parse-joda-date [x] (.toLocalDate x))
   java.util.Date
   (parse-joda-date [x] (LocalDate. (.getTime x) DateTimeZone/UTC))
   String
@@ -152,6 +164,8 @@
   (parse-joda-time [x]))
 
 (extend-protocol ParseJodaTime
+  DateTime
+  (parse-joda-time [x] (.toLocalTime x))
   java.util.Date
   (parse-joda-time [x] (LocalTime. (.getTime x) DateTimeZone/UTC))
   String
