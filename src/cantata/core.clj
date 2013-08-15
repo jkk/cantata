@@ -339,12 +339,14 @@
              :where (build-key-pred pk ids)
              :modifiers [:distinct]
              :order-by pk}
-          maps (apply query* ds q opts)]
+          maps (apply query ds q opts)
+          qual-parts (cu/split-path qual)
+          qual-revs (cq/get-qual-parts-reverses qual qual-parts env)]
       [qual (into {} (for [m maps]
                        [(cdm/pk-val m pk)
-                        (getf m qual)]))])))
+                        [qual-parts qual-revs (getf m qual)]]))])))
 
-(defn ^:private incorporate-many-results [pk pk? npk maps many-results sks env]
+(defn ^:private incorporate-many-results [pk pk? npk maps many-results sks]
   (let [rempk (remove (set sks) npk)]
     (into
       []
@@ -356,12 +358,8 @@
           (reduce
             (fn [m [qual pk->rel-maps]]
               (let [id (cdm/pk-val m pk)
-                    rel-maps (pk->rel-maps id)
-                    m (if pk? m (apply dissoc m rempk))
-                    qual-parts (cu/split-path qual)
-                    qual-revs (for [part qual-parts]
-                                (when-let [chain (not-empty (-> part env :chain))]
-                                  (some (comp :reverse :rel) chain)))]
+                    [qual-parts qual-revs rel-maps] (pk->rel-maps id)
+                    m (if pk? m (apply dissoc m rempk))]
                 (cq/nest-in m qual-parts qual-revs rel-maps)))
             m many-results))))))
 
@@ -412,9 +410,9 @@
                                              many-fields)
                        many-results (when (seq maps)
                                       (fetch-many-results
-                                        ds ent pk npk ids many-groups opts))]
+                                        ds ent pk npk ids many-groups env opts))]
                    (incorporate-many-results
-                     pk pk? npk maps many-results select-paths env)))]
+                     pk pk? npk maps many-results select-paths)))]
     (with-meta
       maps
       {::query-from ent

@@ -626,8 +626,7 @@
   (if ks
     (let [nv (nest-in {} ks revs v)]
       (assoc m k (if rev? [nv] nv)))
-    (assoc m k (if (and (not rev?) (sequential? v) (or (= 0 (count v))
-                                                       (= 1 (count v))))
+    (assoc m k (if (and (not rev?) (sequential? v))
                  (first v)
                  v))))
 
@@ -679,10 +678,18 @@
           (for [group (group-rows rows key-fn)]
             (reduce
               (fn [m [rel-pk-cols rel-pp _ rel-pp-rev]]
-                (nest-in m (dropv (count path-parts) rel-pp) rel-pp-rev
-                         (nest-group
-                           rel-cols group col->idx col->info
-                           all-path-parts ds-opts rel-pp rel-pk-cols)))
+                (let [nest-pp (dropv (count path-parts) rel-pp)
+                      nest-pp-rev (dropv (count path-parts) rel-pp-rev)
+                      nest-pp-rev (if (< 1 (count nest-pp))
+                                    (reduce (fn [revs rev?]
+                                              (conj revs (or (peek revs)
+                                                             rev?)))
+                                            [] nest-pp-rev)
+                                   nest-pp-rev)]
+                  (nest-in m nest-pp nest-pp-rev
+                           (nest-group
+                             rel-cols group col->idx col->info
+                             all-path-parts ds-opts rel-pp rel-pk-cols))))
               (build-result-map own-basenames (map (first group) own-idxs) ds-opts)
               next-infos)))))))
 
@@ -691,22 +698,27 @@
     (-> chain peek :to :pk)
     default-pk))
 
+(defn get-qual-parts-reverses [qual qual-parts env]
+  (loop [qual qual
+         revs []]
+    (if-not qual
+      (into [] (reverse revs))
+      (recur
+        (first (cu/unqualify qual))
+        (conj revs (some (comp :reverse :rel) (-> qual env :chain)))))))
+
 (defn ^:private get-col-info [from-pk env col]
   (let [rp (env col)
         col-agg? (agg? col)
         path-parts (if col-agg?
                      []
                      (pop (cu/split-path col)))
-        path-parts-reverse (for [part path-parts]
-                             (when-let [chain (not-empty (-> part env :chain))]
-                               (some (comp :reverse :rel) chain)))
-        qual (when-not col-agg?
-               (cu/qualifier col))
+        [qual basename] (if col-agg?
+                          [nil col]
+                          (cu/unqualify col))
+        path-parts-reverse (get-qual-parts-reverses qual path-parts env)
         pk-cols (mapv #(cu/join-path qual %)
-                      (dm/normalize-pk (get-rp-pk rp from-pk)))
-        basename (if col-agg?
-                   col
-                   (-> rp :resolved :value :name))]
+                      (dm/normalize-pk (get-rp-pk rp from-pk)))]
     [pk-cols path-parts basename path-parts-reverse]))
 
 (defn nest
