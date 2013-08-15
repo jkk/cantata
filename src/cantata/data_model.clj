@@ -116,29 +116,32 @@
         (assoc v :name k))
       specs)))
 
-(defn make-data-model [entity-specs]
-  (let [entity-specs (normalize-entity-specs entity-specs)]
-    (when-let [bad-spec (first (remove map? entity-specs))]
-      (throw-info ["Invalid entity spec:" bad-spec]
-                  {:entity-spec bad-spec}))
-    (let [;; Wait to init rels, so we can guess PK/FKs more reliably
-          ents (ordered-map-by-name (map #(dissoc % :rels) entity-specs)
-                                    make-entity)
-          ents (reduce
-                 (fn [ents [ent rspec]]
-                   (if rspec
-                     (let [rel (make-rel rspec ents)]
-                       (-> ents
-                         (assoc-in [(:name ent) :rels (:name rel)] rel)
-                         (add-reverse-rels ent rel)))
-                     ents))
-                 ents
-                 (for [[ent rspecs] (map list (vals ents)
-                                         (map :rels entity-specs))
-                       rspec rspecs]
-                   [ent rspec]))]
-      (validate-data-model
-        (r/->DataModel ents)))))
+(defn make-data-model
+  ([entity-specs]
+    (make-data-model nil entity-specs))
+  ([name entity-specs]
+    (let [entity-specs (normalize-entity-specs entity-specs)]
+      (when-let [bad-spec (first (remove map? entity-specs))]
+        (throw-info ["Invalid entity spec:" bad-spec]
+                    {:entity-spec bad-spec}))
+      (let [;; Wait to init rels, so we can guess PK/FKs more reliably
+            ents (ordered-map-by-name (map #(dissoc % :rels) entity-specs)
+                                      make-entity)
+            ents (reduce
+                   (fn [ents [ent rspec]]
+                     (if rspec
+                       (let [rel (make-rel rspec ents)]
+                         (-> ents
+                           (assoc-in [(:name ent) :rels (:name rel)] rel)
+                           (add-reverse-rels ent rel)))
+                       ents))
+                   ents
+                   (for [[ent rspecs] (map list (vals ents)
+                                           (map :rels entity-specs))
+                         rspec rspecs]
+                     [ent rspec]))]
+        (validate-data-model
+          (r/->DataModel name ents))))))
 
 (defn data-model? [x]
   (instance? DataModel x))
