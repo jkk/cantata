@@ -73,13 +73,13 @@
 
 ;;
 ;; QUERY CHOICES
-;; * As nested maps, multiple queries - (query ...)
-;; * As nested maps, single query     - (query* ...)
-;; * As flat maps, single query       - (flat-query ... :flat true)
-;; * As vectors, single query         - (flat-query ... :vectors true)
+;; * As nested maps, single query     - (query ...)
+;; * As nested maps, multiple queries - (querym ...)
+;; * As flat maps, single query       - (query ... :flat true)
+;; * As vectors, single query         - (query ... :vectors true)
 ;;
 
-(defn flat-query [ds q & {:keys [vectors] :as opts}]
+(defn ^:private flat-query [ds q & [{:keys [vectors] :as opts}]]
   (let [ds-opts (cds/get-options ds)]
     (with-query-rows* ds q opts
       (fn [cols rows]
@@ -89,59 +89,33 @@
             (mapv #(cq/build-result-map cols % ds-opts) rows)
             (meta cols)))))))
 
-(defn flat-query1 [ds q & {:keys [vectors] :as opts}]
-  (let [ds-opts (cds/get-options ds)]
-    (with-query-rows* ds (sql/add-limit-1 q) opts
+(defn query [ds q & {:keys [flat vectors] :as opts}]
+  (if (or flat vectors (sql/plain-sql? q))
+    (flat-query ds q opts)
+    ;; TODO: implicitly add/remove PKs if necessary? :force-pk opt?
+    (with-query-rows* ds q opts
       (fn [cols rows]
-        (if vectors
-          [cols (first rows)]
-          (when (first rows)
-            (with-meta
-              (cq/build-result-map cols (first rows) ds-opts)
-              (meta cols))))))))
+        (nest cols rows :ds-opts (cds/get-options ds))))))
 
-(defn query* [ds q & opts]
-  (when (sql/plain-sql? q)
-    (throw-info "Use flat-query to execute plain SQL queries" {:q q}))
-  ;; TODO: implicitly add/remove PKs if necessary? :force-pk opt?
-  (with-query-rows* ds q opts
-    (fn [cols rows]
-      (nest cols rows :ds-opts (cds/get-options ds)))))
+(defn query-count [ds q & opts]
+  (apply sql/query-count (force ds) (cds/get-data-model ds) q opts))
 
-(defn query1* [ds q & opts]
-  (let [ms (apply query* ds (sql/add-limit-1 q) opts)]
+(declare querym)
+
+(defn querym1 [ds q & opts]
+  (let [ms (apply querym ds (sql/add-limit-1 q) opts)]
     (when-let [m (first ms)]
       (with-meta m (meta ms)))))
-
-(declare query)
-
-(defn query1 [ds q & opts]
-  (let [ms (apply query ds (sql/add-limit-1 q) opts)]
-    (when-let [m (first ms)]
-      (with-meta m (meta ms)))))
-
-(defn ^:private build-by-id-query [ds ename id]
-  (let [ent (cdm/entity (cds/get-data-model ds) ename)]
-    {:from ename :where [:= id (:pk ent)]}))
 
 (defn by-id [ds ename id & [q & opts]]
-  (let [baseq (build-by-id-query ds ename id)]
-    (apply query1 ds (if (map? q)
-                       [baseq q]
-                       (cons baseq q))
-           opts)))
-
-(defn by-id* [ds ename id & [q & opts]]
-  (let [baseq (build-by-id-query ds ename id)
-        ms (apply query* ds (if (map? q)
+  (let [ent (cdm/entity (cds/get-data-model ds) ename)
+        baseq {:from ename :where (cq/build-key-pred (:pk ent) id)}
+        ms (apply querym ds (if (map? q)
                               [baseq q]
                               (cons baseq q))
                   opts)]
     (when-let [m (first ms)]
       (with-meta m (meta ms)))))
-
-(defn query-count [ds q & opts]
-  (apply sql/query-count (force ds) (cds/get-data-model ds) q opts))
 
 (defmacro with-transaction [binding & body]
   (let [[ds-sym ds] (if (symbol? binding)
@@ -296,7 +270,7 @@
         ret))))
 
 (defn queryf [ds q & opts]
-  (let [res (apply query* ds q opts)
+  (let [res (apply query ds q opts)
         env (get-query-env res)
         f1name (cq/first-select-field q)]
     (if (= f1name (-> f1name env :root :name))
@@ -312,31 +286,15 @@
   (let [q (assoc eq
                  :select fields
                  :modifiers (when any-many? [:distinct]))]
-    (apply query* ds q opts)))
+    (apply query ds q opts)))
 
-(defn ^:private build-key-pred [pk id-or-ids]
-  (if (and (sequential? pk) (< 1 (count pk)))
-    (if (sequential? (first id-or-ids))
-      (into [:or] (for [id id-or-ids]
-                    (into [:and] (for [[pk id] (map list pk id)]
-                                   [:= pk id]))))
-      [:= pk id-or-ids])
-    (let [pk (if (sequential? pk)
-               (first pk)
-               pk)]
-      (if (and (sequential? id-or-ids) (< 1 (count id-or-ids)))
-        [:in pk (vec id-or-ids)]
-        [:= pk (if (sequential? id-or-ids)
-                 (first id-or-ids)
-                 id-or-ids)]))))
-
-(defn ^:private fetch-many-results [ds ent pk npk ids many-groups opts]
+(defn ^:private fetch-many-results [ds ent pk npk ids many-groups env opts]
   (for [[qual fields] many-groups]
     ;; TODO: can be done with fewer joins by using reverse rels
     (let [q {:select (concat (remove (set fields) npk)
                              fields)
              :from (:name ent)
-             :where (build-key-pred pk ids)
+             :where (cq/build-key-pred pk ids)
              :modifiers [:distinct]
              :order-by pk}
           maps (apply query ds q opts)
@@ -363,11 +321,11 @@
                 (cq/nest-in m qual-parts qual-revs rel-maps)))
             m many-results))))))
 
-(defn query [ds q & opts]
+(defn querym [ds q & opts]
   (when (sql/plain-sql? q)
-    (throw-info "Use flat-query to execute plain SQL queries" {:q q}))
+    (throw-info "querym cannot execute plain SQL queries; use query instead" {:q q}))
   (when (sql/prepared? q)
-    (throw-info "Use query* or flat-query to execute prepared queries" {:q q}))
+    (throw-info "querym cannot execute prepared queries; use query instead" {:q q}))
   (let [dm (cds/get-data-model ds)
         [eq env] (cq/expand-query dm q :expand-joins false)
         ent (-> (env (:from eq)) :resolved :value)
@@ -514,7 +472,7 @@
   (let [dm (cds/get-data-model ds)
         ent (cdm/entity dm ename)
         ids (cu/seqify id-or-ids)]
-    (delete! ds ename (build-key-pred (:pk ent) ids))))
+    (delete! ds ename (cq/build-key-pred (:pk ent) ids))))
 
 (defn cascading-delete-ids!
   "Deletes any dependent records and then deletes the entity record for the
@@ -536,8 +494,8 @@
                      ds [:from dep-name
                          :select (cdm/normalize-pk dep-pk)
                          :where [:and
-                                 (build-key-pred (:key dep-rel) other-rk)
-                                 (build-key-pred other-pk id-or-ids)]])]
+                                 (cq/build-key-pred (:key dep-rel) other-rk)
+                                 (cq/build-key-pred other-pk id-or-ids)]])]
         (doseq [del-m del-ms]
           (cascading-delete-ids! ds dep-name (cdm/pk-val del-m dep-pk))))))
   (delete-ids! ds ename id-or-ids))
@@ -553,7 +511,7 @@
     (if (nil? id)
       (apply insert! ds ename m opts)
       (do
-        (if (flat-query1 ds [:from ename :select pk :where [:= pk id]])
+        (if (first (flat-query ds [:from ename :select pk :where [:= pk id]]))
           (apply update! ds ename m [:= pk id] opts)
           (apply insert! ds ename m opts))
         id))))
@@ -589,7 +547,7 @@
         old-vms (flat-query
                   ds [:from (:name vent)
                       :select vrfk
-                      :where (build-key-pred vfk id)])
+                      :where (cq/build-key-pred vfk id)])
         old-rids (map #(cdm/pk-val % vrfk) old-vms)
         rids (doall
               (for [rm rms]
@@ -602,7 +560,7 @@
                                (assoc-pk vrfk rid))))
     ;; Only recs in the junction table are removed; NOT from the rel table
     (when (seq rem-rids)
-      (delete! ds (:name vent) (build-key-pred
+      (delete! ds (:name vent) (cq/build-key-pred
                                  [vfk vrfk]
                                  (map vector (repeat id) rem-rids))))
     true))
@@ -617,7 +575,7 @@
           fk (or (:other-key rel) rpk)
           rename (:name rent)
           old-rms (flat-query
-                    ds [:from rename :select rpk :where (build-key-pred fk id)])
+                    ds [:from rename :select rpk :where (cq/build-key-pred fk id)])
           rids (doall
                 (for [rm rms]
                   (save! ds (:name rent) (assoc-pk rm fk id))))
@@ -716,13 +674,13 @@
                        ds [:from dep-name
                            :select (cdm/normalize-pk dep-pk)
                            :where [:and
-                                   (build-key-pred (:key dep-rel) other-rk)
-                                   (build-key-pred other-pk id-to-merge)]])]
+                                   (cq/build-key-pred (:key dep-rel) other-rk)
+                                   (cq/build-key-pred other-pk id-to-merge)]])]
           (doseq [mod-m mod-ms]
             (let [dep-id (cdm/pk-val mod-m dep-pk)]
               (if (= dep-pk (:key dep-rel))
                 (merge-and-delete! ds dep-name id-to-keep dep-id)
                 (update! ds dep-name
                          (assoc-pk {} (:key dep-rel) id-to-keep)
-                         (build-key-pred dep-pk dep-id))))))))
+                         (cq/build-key-pred dep-pk dep-id))))))))
     (delete-ids! ds ename id-to-merge)))

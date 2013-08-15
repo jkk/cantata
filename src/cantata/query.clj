@@ -581,6 +581,22 @@
       (first select)
       select)))
 
+(defn build-key-pred [pk id-or-ids]
+  (if (and (sequential? pk) (< 1 (count pk)))
+    (if (sequential? (first id-or-ids))
+      (into [:or] (for [id id-or-ids]
+                    (into [:and] (for [[pk id] (map list pk id)]
+                                   [:= pk id]))))
+      [:= pk id-or-ids])
+    (let [pk (if (sequential? pk)
+               (first pk)
+               pk)]
+      (if (and (sequential? id-or-ids) (< 1 (count id-or-ids)))
+        [:in pk (vec id-or-ids)]
+        [:= pk (if (sequential? id-or-ids)
+                 (first id-or-ids)
+                 id-or-ids)]))))
+
 (defn ^:private next-row-group [[row & rows] key-fn]
   (when row
     (let [key (key-fn row)]
