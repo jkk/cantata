@@ -41,13 +41,12 @@
     (with-query-maps* ds q nil body-fn))
   ([ds q opts body-fn]
     (let [ds-opts (cds/get-options ds)]
-      (apply sql/query (force ds) (cds/get-data-model ds) q
-             (fn [cols rows]
-               (body-fn (map #(cq/build-result-map cols % ds-opts)
-                             rows)))
-             (if (map? opts)
-               (apply concat opts)
-               opts)))))
+      (with-query-rows* ds q opts
+        (fn [cols rows]
+          (body-fn (with-meta
+                     (map #(cq/build-result-map cols % ds-opts)
+                          rows)
+                     (meta cols))))))))
 
 (defmacro with-query-maps [maps ds q & body]
   `(with-query-maps* ~ds ~q (fn [~maps]
