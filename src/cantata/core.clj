@@ -1,4 +1,5 @@
 (ns cantata.core
+  "Primary public namespace - data source setup, querying, manipulation"
   (:require [cantata.util :as cu :refer [throw-info]]
             [cantata.data-model :as cdm]
             [cantata.data-source :as cds]
@@ -8,16 +9,77 @@
             [clojure.java.jdbc :as jd]
             [flatland.ordered.map :as om]))
 
-(defn data-source [db-spec & model+opts]
-  (apply cds/data-source db-spec model+opts))
+(defn data-source
+  "Create and return a data source map. The returned map will be compatible
+  with both Cantata and clojure.java.jdbc.
 
-(defn buildq [& qargs]
+            db-spec - a clojure.java.jdbc-compatible spec
+         model-spec - data model spec
+
+  Keyword options (all default to false unless otherwise noted):
+
+           :reflect - generate a data model from the data source automatically;
+                      can be used in combination model-spec, the latter taking
+                      precedence
+            :pooled - create and return a pooled data source
+        :joda-dates - return Joda dates for all queries
+          :clob-str - convert all CLOB values returned by queries to String
+        :blob-bytes - convert all BLOB values returned by queries to byte
+                      arrays
+    :unordered-maps - return unordered hash maps for all queries
+           :quoting - identifier quoting style to use; auto-detects if
+                      left unspecified; set to nil to turn off quoting (this
+                      will break many queries)
+          :max-idle - max pool idle time in seconds; default 30 mins
+   :max-idle-excess - max pool idle time for excess connections, in seconds;
+                      default 3 hours"
+  [db-spec model-spec & opts]
+  (apply cds/data-source db-spec model-spec opts))
+
+(defn build
+  "Builds a query from the given arguments, which can be zero or more maps
+  followed by zero or more keyword-value clauses. For example:
+
+    (build {:from :film} :select :title :limit 1)
+
+  Officially supported clauses:
+
+         :from - name of the entity to query
+       :select - paths of fields, relationships, or aggregates to select.
+                 Unlike SQL, unqualified names will be assumed to refer to
+                 the :from entity
+        :where - predicate that results must match
+     :order-by - field names to sort results by. E.g., :title or
+                 [[:title :desc] :release-year]
+        :limit - integer that limits the number of results
+       :offset - integer offset into result set
+     :group-by - fields to group results by; works best with flat queries.
+                 Forbidden for certain multi-queries
+       :having - like :where but performed after :group-by
+    :modifiers - one or more keyword modifiers:
+                   :distinct - return distinct results
+      :include - one or more relationship names to perform a left outer join
+                 with. May also be a map of the form:
+                 {:rel-name [:foo :bar :baz]}, to select specific fields from
+                 related entities.
+         :with - like :include but performs an inner join
+      :without - return results that have no related entity records for the
+                 provided relationship names
+         :join - explicit inner join. E.g., [[foo :f] [:= :id :f.id]]
+    :left-join - explicit left outer join
+      :options - a map with the following optional keys:
+                   :join-type - whether to perform an :outer (the default) or
+                                :inner join for fields selected from related
+                                entities
+
+  Aggregates are keywords that begin with % - e.g., :%count.actor.id
+
+  Bindable parameters are denoted with a leading ? - e.g., :?actor-name"
+  [& qargs]
   (apply cq/build-query qargs))
 
-(defn mergeq [q & qargs]
-  (apply cq/build-query q qargs))
-
 (defn with-query-rows*
+  "Helper function for with-query-rows"
   ([ds q body-fn]
     (with-query-rows* ds q nil body-fn))
   ([ds q opts body-fn]
@@ -26,11 +88,16 @@
              (apply concat opts)
              opts))))
 
-(defmacro with-query-rows [cols rows ds q & body]
+(defmacro with-query-rows
+  "Evaluates body after executing a query against a data source and binding
+  column names and row results to the symbols designated by `cols` and `rows`,
+  respectively. See buildq for query format."
+  [cols rows ds q & body]
   `(with-query-rows* ~ds ~q (fn [~cols ~rows]
                               ~@body)))
 
 (defn with-query-maps*
+  "Helper function for with-query-maps"
   ([ds q body-fn]
     (with-query-maps* ds q nil body-fn))
   ([ds q opts body-fn]
@@ -42,15 +109,28 @@
                           rows)
                      (meta cols))))))))
 
-(defmacro with-query-maps [maps ds q & body]
+(defmacro with-query-maps
+  "Evaluates body after executing a query against a data source and binding
+  result maps to the symbol designated by `maps`. See buildq for query format."
+  [maps ds q & body]
   `(with-query-maps* ~ds ~q (fn [~maps]
                               ~@body)))
 
 (defn query-meta
-  ([x]
-    (::query (meta x)))
-  ([x k]
-    (k (::query (meta x)))))
+  "Returns information about query results gathered before the query was
+  executed, if available. The returned map will have keys:
+
+           :from - entity queried
+            :env - map of resolved paths from the query
+       :expanded - expanded form of the query
+    :added-paths - paths added by Cantata to the query before executing it
+
+  Query meta data is normally attached to either the collection of maps
+  returned, or to the collection of column names returned."
+  ([results]
+    (::query (meta results)))
+  ([results k]
+    (k (::query (meta results)))))
 
 ;; TODO: public version that works on arbitrary vector/map data, sans meta data
 (defn ^:private nest
@@ -69,50 +149,93 @@
         [cols rows]))
     (with-query-maps* ds q opts identity)))
 
-;;
-;; QUERY CHOICES
-;; * As nested maps, single query     -> (query ...)
-;; * As nested maps, multiple queries -> (querym ...)
-;; * As flat maps, single query       -> (query ... :flat true)
-;; * As vectors, single query         -> (query ... :vectors true)
-;;
+(defn query
+  "Executes query `q` against data source `ds` in a single round-trip.
 
-(defn query [ds q & {:keys [flat vectors force-pk] :as opts}]
+  The query can be one of the following:
+
+     * Query map/vector - see buildq for format
+     * PreparedQuery record - see prepare-query
+     * SQL string
+     * clojure.java.jdbc-style [sql params] vector
+
+  By default, returns a sequence of maps, with nested maps and sequences
+  for values selected from related entities. Example:
+
+    (query ds {:from :film :select [:title :actor.name] :where [:= 1 :id]})
+
+    => [{:title \"Lawrence of Arabia\"
+         :actor [{:name \"Peter O'Toole\"} {:name \"Omar Sharif\"}]}]
+
+  NOTE: using the :limit clause may truncate nested values from to-many
+  relationships. To limit your query to a single top-level entity record while
+  retrieving all related values, restrict the results using the :where clause,
+  or use the `querym` function.
+
+  Keyword options:
+
+        :flat - do not nest results; results for the same primary key may be
+                returned multiple times if the query selects paths from any
+                to-many relationships
+     :vectors - return results as a vector of [cols rows], where cols is a
+                vector of column names, and rows is a sequence of vectors with
+                values for each column
+    :force-pk - prevent Cantata from implicitly including the entity's
+                primary key in the low-level database query when to-many
+                relationships are selected (which it does to make nesting more
+                predictable and consistent)"
+  [ds q & {:keys [flat vectors force-pk] :as opts}]
   (if (or flat vectors (sql/plain-sql? q))
     (flat-query ds q opts)
     (with-query-rows* ds q (assoc opts :force-pk (not (false? force-pk)))
       (fn [cols rows]
         (nest cols rows :ds-opts (cds/get-options ds))))))
 
-(defn query-count [ds q & opts]
+(defn query-count
+  "Returns the number of matching results for query `q`. By default, returns
+  the count of distinct top-level entity results. Set the :flat option to true
+  to return the count of ALL rows, including to-many rows with redundant
+  top-level values."
+  [ds q & opts]
   (apply sql/query-count (force ds) (cds/get-data-model ds) q opts))
 
 (declare querym)
 
-(defn querym1 [ds q & opts]
+(defn querym1
+  "Adds a \"limit 1\" clause to the query and executes it, potentially in
+  multiple round trips (one for each to-many relationship selected - the limit
+  clause will not affect these). See `querym`."
+  [ds q & opts]
   (let [ms (apply querym ds (sql/add-limit-1 q) opts)]
     (when-let [m (first ms)]
       (with-meta m (meta ms)))))
 
-(defn by-id [ds ename id & [q & opts]]
+(defn by-id
+  "Fetches the entity record from the data source whose primary key value is
+  equal to `id`. Uses querym1 to execute the query, so multiple round trips to
+  the data source may occur. Query clauses from `q` will be merged into the
+  generated query."
+  [ds ename id & [q & opts]]
   (let [ent (cdm/entity (cds/get-data-model ds) ename)
-        baseq {:from ename :where (cq/build-key-pred (:pk ent) id)}
-        ms (apply querym ds (if (map? q)
-                              [baseq q]
-                              (cons baseq q))
-                  opts)]
-    (when-let [m (first ms)]
-      (with-meta m (meta ms)))))
+        baseq {:from ename :where (cq/build-key-pred (:pk ent) id)}]
+    (apply querym1 ds (if (map? q)
+                        [baseq q]
+                        (cons baseq q))
+           opts)))
 
 (defn getf
-  "Fetches one or more nested field values from the given query result or
-  results, according to a dotted keyword path, traversing into related results
-  as necessary.
+  "Returns one or more nested field values from the given query result or
+  results, traversing into related results as necessary, according to a
+  dotted keyword path.
 
-  Path and query result can be swapped as arguments. I.e., (getf :title results)
-  and (getf results :title) do the same thing.
+  `path` and `qr` can be swapped as arguments. The following calls do the same
+  thing:
 
-  If invoked with one argument, returns a partial that looks up the path."
+    (getf :actor.name results)
+    (getf results :actor.name)
+  
+  If invoked with one argument, returns a partial function that calls `getf` on
+  its argument."
   ([path]
     #(getf % path))
   ([qr path]
@@ -134,15 +257,19 @@
             ks))))))
 
 (defn getf1
-  "Fetches a nested field value from the given query result or results,
-  traversing into related results as necessary. Returns the same as getf except
-  if the result would be a sequence, in which case it returns the first
+  "Returns a nested field value from the given query result or results,
+  traversing into related results as necessary. Returns the same as `getf`
+  except if the result would be a sequence, in which case it returns the first
   element.
 
-  Path and query result can be swapped as arguments. I.e., (getf :title results)
-  and (getf results :title) do the same thing.
+  `path` and `qr` can be swapped as arguments. The following calls do the same
+  thing:
 
-  If invoked with one argument, returns a partial that looks up the path."
+    (getf1 :actor.name results)
+    (getf1 results :actor.name)
+
+  If invoked with one argument, returns a partial function that calls `getf1`
+  on its argument."
   ([path]
     #(getf1 % path))
   ([qr path]
@@ -151,7 +278,13 @@
         (first ret)
         ret))))
 
-(defn queryf [ds q & opts]
+(defn queryf
+  "Same as `query`, but additionally calls `getf` using the first selected path.
+  Example:
+
+    (queryf ds {:from :film :select :actor.name :where [:= 1 :id]})
+    => [\"Peter O'Toole\" \"Omar Sharif\"]"
+  [ds q & opts]
   (let [res (apply query ds q opts)
         env (query-meta res :env)
         f1name (cq/first-select-field q)]
@@ -159,19 +292,32 @@
       res
       (getf res (-> f1name env :final-path)))))
 
-(defn queryf1 [ds q & opts]
+(defn queryf1
+  "Same as query, but additionally calls getf1 using the first selected path.
+  Example:
+
+    (queryf1 ds {:from :film :select :actor.name :where [:= 1 :id]})
+    => \"Peter O'Toole\""
+  [ds q & opts]
   (first (apply queryf ds q opts)))
 
 ;;;;
 
-(defn expand-query [ds-or-dm q & opts]
+(defn expand-query
+  "Given a data source, data model, and query, expands any implicit joins
+  and wildcards. Returns a vector of the expanded query and a map of
+  resolved paths."
+  [ds-or-dm q & opts]
   (let [[ds dm] (if (cdm/data-model? ds-or-dm)
                   [nil ds-or-dm]
                   [ds-or-dm nil])
         dm (or dm (cds/get-data-model ds))]
     (apply cq/expand-query dm q opts)))
 
-(defn to-sql [ds-or-dm q & opts]
+(defn to-sql
+  "Returns SQL for the given query (as normally generated by the query
+  function)"
+  [ds-or-dm q & opts]
   (let [[ds dm] (if (cdm/data-model? ds-or-dm)
                   [nil ds-or-dm]
                   [ds-or-dm nil])
@@ -181,27 +327,45 @@
            :quoting (when ds (cds/get-quoting ds))
            opts)))
 
-(defn prepare [ds q & opts]
+(defn prepare
+  "Return a PreparedQuery record, which contains ready-to-execute SQL and
+  optional bindable parameters (which can be included in queries using keywords
+  like :?actor-name)."
+  [ds q & opts]
   (apply sql/prepare (force ds) (cds/get-data-model ds) q opts))
 
 ;;;;
 
-(defmacro with-transaction [binding & body]
+(defmacro with-transaction
+  "A light wrapper around clojure.java.jdbc/db-transaction.
+
+  Begins a transaction, binding the connection-bearing db-spec to a given
+  symbol. If given a single symbol as the binding, creates a shadowing binding
+  with the same name."
+  [binding & body]
   (let [[ds-sym ds] (if (symbol? binding)
                       [binding binding]
                       binding)]
     `(jd/db-transaction [~ds-sym (force ~ds)] ~@body)))
 
-(defmacro rollback! [ds]
+(defmacro rollback!
+  "Signals that the current transaction should roll back on completion"
+  [ds]
   `(jd/db-set-rollback-only! ~ds))
 
-(defmacro unset-rollback! [ds]
+(defmacro unset-rollback!
+  "Signals that the current transaction should NOT roll back on completion"
+  [ds]
   `(jd/db-unset-rollback-only! ~ds))
 
-(defmacro rollback? [ds]
+(defmacro rollback?
+  "Returns true if the current transaction is set to roll back on completion"
+  [ds]
   `(jd/db-is-rollback-only ~ds))
 
-(defmacro with-rollback [binding & body]
+(defmacro with-rollback
+  "Begins a transaction that is immediately set to roll back on completion"
+  [binding & body]
   (let [[ds-sym ds] (if (symbol? binding)
                       [binding binding]
                       binding)]
@@ -210,8 +374,8 @@
        ~@body)))
 
 (defmacro verbose
-  "Causes any wrapped queries or statements to print lots of logging
-  information during execution. See also 'debug'"
+  "Causes any wrapped queries or statements to print lots of low-level database
+  logging information during execution. See also `debug`"
   [& body]
   `(binding [cu/*verbose* true]
      (with-redefs [jd/db-do-prepared sql/db-do-prepared-hook
@@ -219,7 +383,7 @@
        ~@body)))
 
 (defmacro with-debug
-  "Starts a transaction which will be rolled back when it ends, and prints
+  "Starts a transaction which will be rolled back on completion, and prints
   verbose information about all database activity.
 
   WARNING: The underlying data source must actually support rollbacks. If it
