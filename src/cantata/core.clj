@@ -63,15 +63,16 @@
 (defn get-query-expanded [x]
   (::query-expanded (meta x)))
 
-(defn get-query-added-pks [x]
-  (::query-added-pks (meta x)))
+(defn get-query-added-paths [x]
+  (::query-added-paths (meta x)))
 
 ;; TODO: version that works on arbitrary vector/map data, sans env
 (defn nest
   ([cols rows & {:keys [ds-opts]}]
     (let [from (get-query-from cols)
           env (get-query-env cols)
-          opts (merge ds-opts {:added-pks (set (get-query-added-pks cols))})]
+          opts (merge ds-opts
+                      {:added-paths (set (get-query-added-paths cols))})]
       (with-meta
         (cq/nest cols rows from env opts)
         (meta cols)))))

@@ -680,7 +680,7 @@
                               cols*)
         pk-idxs	(keep col->idx pk-cols)
         key-fn (get-key-fn pk-idxs (map col->idx own-cols))
-        own-cols (remove (:added-pks opts) own-cols)
+        own-cols (remove (:added-paths opts) own-cols)
         own-idxs (map col->idx own-cols)
         own-basenames (map #(nth (col->info %) 2) own-cols)]
     ;; Having this makes nesting/distincting reliable, but also makes queries
