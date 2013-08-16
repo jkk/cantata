@@ -299,7 +299,7 @@
   (mapcat (fn [field]
             (cond
               (identical? :* field) (or (seq (dm/field-names ent))
-                                        (cu/join-path (:name ent) :*))
+                                        [(cu/join-path (:name ent) :*)])
               (wildcard? field) (expand-wildcard dm ent env field)
               (= :entity (-> env field :resolved :type)) (expand-wildcard
                                                            dm ent env (cu/join-path field :*))
@@ -567,7 +567,7 @@
                 (vals env))
     [eq env] ;don't bother if there are no to-many rels
     (let [npk (dm/normalize-pk (:pk ent))
-          select (map (comp :final-path env) (:select eq))
+          select (map #(or (:final-path (env %)) %) (:select eq))
           add-pks (remove (set select) npk)
           eq (if (seq add-pks)
                (assoc eq :select (concat select add-pks))
@@ -899,9 +899,10 @@
         [many-fields one-fields] ((juxt filter remove)
                                   has-many?
                                   (:select eq))
-        many-rel-names (set (map (comp cu/qualifier :final-path env)
+        get-path #(or (:final-path env %) %)
+        many-rel-names (set (map (comp cu/qualifier get-path)
                                  many-fields))
-        select-paths (map (comp :final-path env) (:select eq))
+        select-paths (map get-path (:select eq))
         [many-fields one-fields] ((juxt filter remove)
                                    (comp many-rel-names cu/qualifier)
                                    select-paths)
