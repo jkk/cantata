@@ -1,4 +1,13 @@
 (ns cantata.query
+  "Implementation of query related features. Calling functions in this
+  namespace is not normally necessary unless you are extending Cantata or
+  have special requirements.
+
+  Most functions besides those related to normalization operate on normalized
+  query maps, not on the looser map/vector format accepted by cantata.core
+  functions.
+
+  See cantata.core for the main API entry point."
   (:require [cantata.util :as cu :refer [throw-info]]
             [cantata.data-model :as dm]
             [cantata.records :as r]
@@ -19,8 +28,14 @@
                         where))
       q)))
 
-(defmulti normalize-clause (fn [[clause clause-val]]
-                             clause))
+(defmulti normalize-clause
+  "Given a [clause-name clause-value] vector, normalizes the clause value as
+  appropriate. E.g., wraps a non-sequential :select into a collection so
+  that it can be operated on generically.
+
+  Dispatches on clause-name."
+  (fn [[clause-name clause-val]]
+    clause-name))
 
 (defmethod normalize-clause :default [[_ clause-val]]
   clause-val)
@@ -66,8 +81,11 @@
 (defmethod normalize-clause :group-by [[_ clause-val]]
   (cu/seqify clause-val))
 
-(defmulti merge-clause (fn [q [clause clause-val]]
-                         clause))
+(defmulti merge-clause
+  "Merges a [clause-name clause-val] pair into the given query map. Dispatches
+  on clause-name."
+  (fn [q [clause-name clause-val]]
+    clause-name))
 
 (defmethod merge-clause :default [q [clause clause-val]]
   (assoc q clause clause-val))
@@ -99,11 +117,16 @@
 (defmethod merge-clause :options [q [_ clause-val]]
   (update-in q [:options] merge clause-val))
 
-(defn merge-clauses [q & clauses]
+(defn merge-clauses
+  "Normalized and merges the given clauses into query map `q`."
+  [q & clauses]
   (reduce merge-clause q (map (juxt first normalize-clause)
                               (partition 2 clauses))))
 
-(defn merge-query [q1 q2]
+(defn merge-query
+  "Merges query map `q2` into query map `q1`. Each clause in `q1` will be
+  normalized and then marged using `merge-clause`."
+  [q1 q2]
   (reduce merge-clause q1 (map (juxt key normalize-clause) q2)))
 
 (declare build-query)
@@ -119,7 +142,7 @@
 
 (defn ^:no-doc build-query
   "Builds a query from the given query arguments and returns a query map with
-  normalized clauses."
+  normalized and merged clauses."
   [& qargs]
   (let [;; one or more query maps
         q (reduce merge-query {} (take-while map? qargs))
@@ -130,7 +153,7 @@
             q)]
     (expand-from q)))
 
-(def logic-ops #{:and :or :xor :not})
+(def ^:private logic-ops #{:and :or :xor :not})
 
 (defn ^:private get-predicate-fields* [x]
   (if (or (map? x) (keyword? x))
@@ -225,10 +248,10 @@
          (and (.endsWith s ".*")
               (not (.startsWith s "%"))))))
 
-(def aggregate-ops #{:count :min :max :avg :sum :count-distinct
-                     :stddev :variance})
+(def ^:private aggregate-ops #{:count :min :max :avg :sum :count-distinct
+                               :stddev :variance})
 
-(def aggregate-re
+(def ^:private aggregate-re
   (re-pattern
     (str "^%(" (string/join "|" (map name aggregate-ops)) ")\\.")))
 
@@ -270,7 +293,9 @@
       (map #(cu/join-path path %)
            (dm/field-names rent)))))
 
-(defn expand-wildcards [dm ent fields env]
+(defn expand-wildcards
+  "Expands any wildcards in `fields` into sequences of relevant entity fields."
+  [dm ent fields env]
   (mapcat (fn [field]
             (cond
               (identical? :* field) (or (seq (dm/field-names ent))
@@ -281,7 +306,7 @@
               :else [field]))
           fields))
 
-(def join-clauses [:join :left-join :right-join])
+(def ^:private join-clauses [:join :left-join :right-join])
 
 (defn get-join-clauses [q]
   (mapcat q join-clauses))
@@ -415,7 +440,7 @@
         (merge-where q (vec (cons :and preds))))
       q)))
 
-(defn get-query-env [dm ent q & [env]]
+(defn ^:private get-query-env [dm ent q & [env]]
   (into (or env {})
         (let [joins (get-join-clauses q)]
           (for [[to on] (partition 2 joins)
@@ -476,7 +501,10 @@
                          (r/->Resolved :joined-field jfield)
                          nil)))))))
 
-(defn resolve-path [dm ent env path & opts]
+(defn resolve-path
+  "Attempts to resolve a path against a data model and a query environment.
+  Returns a ResolvedPath record or nil."
+  [dm ent env path & opts]
   (or
     (get env path)
     (resolve-joined-field env path)
@@ -502,7 +530,10 @@
       (throw-info ["Unrecognized path" path "for entity" (:name ent)]
                   {:path path :entity ent}))))
 
-(defn resolve-and-add-paths [dm ent env paths]
+(defn resolve-and-add-paths
+  "Resolves each path in `paths` and adds the mapping to `env`, which is
+  returned. Throws an exception if any path does not resolve."
+  [dm ent env paths]
   (let [no-fields? (empty? (dm/fields ent))]
     (reduce
       (fn [env path]
@@ -516,7 +547,9 @@
       env
       (remove map? paths))))
 
-(defn get-from [q]
+(defn get-from
+  "Returns the explicit or implied target entity name of a query map"
+  [q]
   (or (:from q)
       (let [quals (for [path (:select q)]
                     (cu/qualifiers path))]
@@ -524,7 +557,11 @@
             (peek (first (filter seq quals)))))
       (first (:select q))))
 
-(defn force-pks [ent eq env]
+(defn force-pks
+  "If the PK of entity `ent` is not already present in query map `eq`, and
+  there are to-many rels referred to, add the PK (or multiple PKs).
+  Returns [q env added-pks]."
+  [ent eq env]
   (if (not-any? (comp #(some (comp :reverse :rel) %) :chain)
                 (vals env))
     [eq env] ;don't bother if there are no to-many rels
@@ -539,7 +576,8 @@
 ;; FIXME: need nested environments for subqueries to work
 (defn expand-query
   "Prepares a query for execution by expanding wildcard fields, implicit joins,
-  and subqueries. Returns the transformed query and a map of resolved paths."
+  and subqueries. Returns the transformed query, a map of resolved paths, and
+  any added paths: [q env added-paths]."
   [dm qargs & {:keys [expand-joins env force-pk] :or {expand-joins true}}]
   (let [q (apply build-query (if (map? qargs) [qargs] qargs))
         q (if (:select q) q (assoc q :select [:*]))
@@ -586,7 +624,10 @@
       (force-pks ent q env)
       [q env])))
 
-(defn first-select-field [q]
+(defn first-select-field
+  "Returns the first selected field in a *non-normalized* query's :select
+  clause"
+  [q]
   (let [select (if (sequential? q)
                  (second (first (filter #(= :select (first %))
                                         (partition 2 q))))
@@ -595,7 +636,10 @@
       (first select)
       select)))
 
-(defn build-key-pred [pk id-or-ids]
+(defn build-key-pred
+  "Given a key name or names and one or more ids, builds and returns a
+  predicate which will match the keys to ids using :=, :in, etc."
+  [pk id-or-ids]
   (if (and (sequential? pk) (< 1 (count pk)))
     (if (sequential? (first id-or-ids))
       (into [:or] (for [id id-or-ids]
@@ -661,6 +705,9 @@
                  v))))
 
 (defn build-result-map
+  "Given field names and values, returns a map that represents a single
+  query result. If the :unordered-maps key of opts is true, returns an
+  unordered map, otherwise an ordered one."
   ([fnames fvals]
     (build-result-map fnames fvals nil))
   ([fnames fvals opts]
@@ -753,6 +800,8 @@
     [pk-cols path-parts basename path-parts-reverse]))
 
 (defn nest
+  "Given query columns, rows, and query meta data, returns a sequence of maps
+  nested as according to the relationships of entities involved in the query."
   ([cols rows from-ent env]
     (nest cols rows from-ent env nil))
   ([cols rows from-ent env opts]
