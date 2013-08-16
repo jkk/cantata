@@ -712,10 +712,11 @@
         vent (cdm/entity dm (:ename via-rel))
         rent (cdm/entity dm (:ename rel))
         vfk (:other-key via-rel)
-        vrfk (:other-key rel)
+        vpk (:pk vent)
+        vrfk (:key rel)
         old-vms (flat-query
                   ds [:from (:name vent)
-                      :select vrfk
+                      :select vpk
                       :where (cq/build-key-pred vfk id)])
         old-rids (map #(cdm/pk-val % vrfk) old-vms)
         rids (doall
