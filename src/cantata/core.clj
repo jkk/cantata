@@ -296,7 +296,22 @@
   [ds q & opts]
   (apply sql/query-count (force ds) (cds/get-data-model ds) q opts))
 
-(declare querym)
+(defn querym
+  "Like `query` but may perform multiple data source round trips - one for
+  each selected second-level path segment that is part of a path that contains
+  a to-many relationship. Primary keys of the top-level entity results are used
+  to fetch the related results.
+
+  :limit and :where clauses apply only to the top-level entity query."
+  [ds q & opts]
+  (when (sql/plain-sql? q)
+    (throw-info "querym cannot execute plain SQL queries; use query instead" {:q q}))
+  (when (sql/prepared? q)
+    (throw-info "querym cannot execute prepared queries; use query instead" {:q q}))
+  (let [dm (cds/get-data-model ds)
+        query-fn (fn [q & opts]
+                   (apply query ds q opts))]
+    (apply cq/multi-query query-fn dm q opts)))
 
 (defn querym1
   "Adds a \"limit 1\" clause to the query and executes it, potentially in
@@ -335,22 +350,7 @@
   ([path]
     #(getf % path))
   ([qr path]
-    (let [[qr path] (if (keyword? path)
-                      [qr path]
-                      [path qr])]
-      (or
-        (path qr)
-        (let [ks (cu/split-path path)]
-          (reduce
-            (fn [maps k]
-              (if (sequential? maps)
-                (let [maps* (map k maps)]
-                  (if (sequential? (first maps*))
-                    (apply concat maps*)
-                    maps*))
-                (k maps)))
-            qr
-            ks))))))
+    (cq/getf qr path)))
 
 (defn getf1
   "Returns a nested field value from the given query result or results,
@@ -539,108 +539,6 @@
       (problem keys msg)))
   ([keys msg]
     (r/->ValidationProblem keys msg)))
-
-;;;;
-
-(defn ^:private fetch-one-maps [ds eq fields any-many? opts]
-  (let [q (assoc eq
-                 :select fields
-                 :modifiers (when any-many? [:distinct]))]
-    (apply query ds q opts)))
-
-(defn ^:private fetch-many-results [ds ent pk npk ids many-groups env opts]
-  (for [[qual fields] many-groups]
-    ;; TODO: can be done with fewer joins by using reverse rels
-    (let [q {:select (concat (remove (set fields) npk)
-                             fields)
-             :from (:name ent)
-             :where (cq/build-key-pred pk ids)
-             :modifiers [:distinct]
-             :order-by pk}
-          maps (apply query ds q opts)
-          qual-parts (cu/split-path qual)
-          qual-revs (cq/get-qual-parts-reverses qual qual-parts env)]
-      [qual (into {} (for [m maps]
-                       [(cdm/pk-val m pk)
-                        [qual-parts qual-revs (getf m qual)]]))])))
-
-(defn ^:private incorporate-many-results [pk pk? npk maps many-results sks]
-  (let [rempk (remove (set sks) npk)]
-    (into
-      []
-      (if (empty? many-results)
-        (if pk?
-          maps
-          (mapv #(apply dissoc % rempk) maps))
-        (for [m maps]
-          (reduce
-            (fn [m [qual pk->rel-maps]]
-              (let [id (cdm/pk-val m pk)
-                    [qual-parts qual-revs rel-maps] (pk->rel-maps id)
-                    m (if pk? m (apply dissoc m rempk))]
-                (cq/nest-in m qual-parts qual-revs rel-maps)))
-            m many-results))))))
-
-(defn querym
-  "Like `query` but may perform multiple data source round trips - one for
-  each selected second-level path segment that is part of a path that contains
-  a to-many relationship. Primary keys of the top-level entity results are used
-  to fetch the related results. 
-
-  :limit and :where clauses apply only to the top-level entity query."
-  [ds q & opts]
-  (when (sql/plain-sql? q)
-    (throw-info "querym cannot execute plain SQL queries; use query instead" {:q q}))
-  (when (sql/prepared? q)
-    (throw-info "querym cannot execute prepared queries; use query instead" {:q q}))
-  (let [dm (cds/get-data-model ds)
-        [eq env] (cq/expand-query dm q :expand-joins false)
-        ent (-> (env (:from eq)) :resolved :value)
-        pk (:pk ent)
-        all-fields (filter #(= :field (-> % env :resolved :type))
-                           (keys env))
-        has-many? (comp #(some (comp :reverse :rel) %) :chain env)
-        any-many? (boolean (seq (filter has-many? all-fields)))
-        [many-fields one-fields] ((juxt filter remove)
-                                  has-many?
-                                  (:select eq))
-        many-rel-names (set (map (comp cu/qualifier :final-path env)
-                                 many-fields))
-        select-paths (map (comp :final-path env) (:select eq))
-        [many-fields one-fields] ((juxt filter remove)
-                                   (comp many-rel-names cu/qualifier)
-                                   select-paths)
-        pk? (cdm/pk-present? select-paths pk)
-        npk (cdm/normalize-pk pk)
-        one-fields (if pk?
-                     one-fields
-                     (concat (remove (set one-fields) npk)
-                             one-fields))]
-    ;; TODO: provide way to specify :group-by
-    (when (and (seq many-fields)
-              (or (:group-by eq)
-                  (some #(= :agg-op (-> % env :resolved :type))
-                        many-fields)))
-     (throw-info
-       "Multi-queries do not support aggregates or group-by on fields from to-many rels"
-       {:q q}))
-    (let [maps (fetch-one-maps ds eq one-fields any-many? opts)
-          maps (if-not any-many?
-                 (if pk?
-                   maps
-                   (let [rempk (remove (set select-paths) npk)]
-                     (mapv #(apply dissoc % rempk) maps)))
-                 (let [ids (mapv #(cdm/pk-val % pk) maps)
-                       many-groups (group-by cu/qualifier
-                                             many-fields)
-                       many-results (when (seq maps)
-                                      (fetch-many-results
-                                        ds ent pk npk ids many-groups env opts))]
-                   (incorporate-many-results
-                     pk pk? npk maps many-results select-paths)))]
-    (with-meta
-      maps
-      {::query {:from ent :env env :expanded eq}}))))
 
 ;;;;
 
