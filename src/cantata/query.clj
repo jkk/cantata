@@ -573,13 +573,20 @@
                eq)]
       [eq env add-pks])))
 
+(defn ^:private normalize-query-args [qargs]
+  (cond
+    (sequential? qargs) qargs
+    (map? qargs) [qargs]
+    (keyword? qargs) [{:from qargs}]
+    :else (throw-info "Invalid query format" {:q qargs})))
+
 ;; FIXME: need nested environments for subqueries to work
 (defn expand-query
   "Prepares a query for execution by expanding wildcard fields, implicit joins,
   and subqueries. Returns the transformed query, a map of resolved paths, and
   any added paths: [q env added-paths]."
   [dm qargs & {:keys [expand-joins env force-pk] :or {expand-joins true}}]
-  (let [q (apply build-query (if (map? qargs) [qargs] qargs))
+  (let [q (apply build-query (normalize-query-args qargs))
         q (if (:select q) q (assoc q :select [:*]))
         from (or (get-from q)
                  (throw-info "No :from found in query" {:q q}))
