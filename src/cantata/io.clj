@@ -26,27 +26,29 @@
               (prn (mapv cp/joda->date row)))))))))
 
 (defn import-data!
-  "Imports entity data from in - a filename, File, etc."
-  [ds in]
-  (with-open [r (io/reader in)]
-    (let [dm (cds/get-data-model ds)]
-      (loop [ent nil
-             cols nil
-             lines (line-seq r)]
-        (when (seq lines)
-          (let [line (edn/read-string (first lines))]
-            (if (map? line)
-              (let [{:keys [ename cols]} line
-                    ent (cdm/entity dm ename)]
-                (when-not ent
-                  (throw-info ["Unrecognized entity" ename]
-                              {:line line :cols cols :ename ename}))
-                (when cu/*verbose*
-                  (println "Importing" ename))
-                (recur ent cols (rest lines)))
-              (do
-                (when-not (and ent cols (sequential? line))
-                  (throw-info "Invalid data file format"
-                              {:line line :cols cols :ent ent}))
-                (c/save! ds (:name ent) (zipmap cols line))
-                (recur ent cols (rest lines))))))))))
+  "Imports entity data from in - a filename, File, etc. Set :update to true to
+  check for presence of each record and, if present, update instead of insert."
+  [ds in & {:keys [update]}]
+  (let [save-fn (if update c/save! c/insert!)]
+    (with-open [r (io/reader in)]
+      (let [dm (cds/get-data-model ds)]
+        (loop [ent nil
+               cols nil
+               lines (line-seq r)]
+          (when (seq lines)
+            (let [line (edn/read-string (first lines))]
+              (if (map? line)
+                (let [{:keys [ename cols]} line
+                      ent (cdm/entity dm ename)]
+                  (when-not ent
+                    (throw-info ["Unrecognized entity" ename]
+                                {:line line :cols cols :ename ename}))
+                  (when cu/*verbose*
+                    (println "Importing" ename))
+                  (recur ent cols (rest lines)))
+                (do
+                  (when-not (and ent cols (sequential? line))
+                    (throw-info "Invalid data file format"
+                                {:line line :cols cols :ent ent}))
+                  (save-fn ds (:name ent) (zipmap cols line))
+                  (recur ent cols (rest lines)))))))))))
