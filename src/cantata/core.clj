@@ -127,8 +127,8 @@
 
     (build {:from :film} :select [:title :actor.name] :limit 1)
 
-  Any paths to related entities mentioned throughout the query will trigger
-  joins when the query is executed.
+  Any paths to related entities referenced outside of :include and :with will
+  trigger outer joins when the query is executed.
 
   Supported clauses:
 
@@ -268,7 +268,7 @@
   retrieving all related records, restrict the results using the :where clause,
   or use the `querym` function.
 
-  NOTE 2: if you do not select primary keys of nested relationships, you may
+  NOTE 2: if you do not select primary keys for nested related maps, you may
   see maps with nil values that in actuality are absent SQL rows. To prevent
   this, select the primary keys or use :with to force an inner join.
 
