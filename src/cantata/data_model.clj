@@ -63,6 +63,9 @@
   (when-not (:name m)
     (throw-info "No :name provided for entity"
                 {:entity-spec m}))
+  (when-not (seq (:fields m))
+    (throw-info "No :fields provided for entity"
+                {:entity-spec m}))
   (r/map->Entity
     (let [fields (ordered-map-by-name (:fields m) make-field)
           pk (or (:pk m)

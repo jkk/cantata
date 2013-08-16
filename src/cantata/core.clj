@@ -31,7 +31,7 @@
 
          :name - entity name, a keyword (optional for map format)
            :pk - name(s) of primary key field(s); default: name of first field
-       :fields - optional collection of field specs; see below for format
+       :fields - collection of field specs; see below for format
          :rels - optional collection of rel specs; see below for format
     :shortcuts - optional map of shortcuts; see below for format
      :validate - optional function to validate a entity values map; called
