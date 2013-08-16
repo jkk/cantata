@@ -765,6 +765,12 @@
           (cascading-delete-ids! ds dep-name (cdm/pk-val del-m dep-pk))))))
   (delete-ids! ds ename id-or-ids))
 
+(defn execute!
+  "Execute arbitrary SQL or Cantata query. Light wrapper around
+  clojure.java.jdbc/execute!"
+  [ds q]
+  (jd/execute! (force ds) (to-sql ds q)))
+
 ;;;;
 
 (declare save!)
