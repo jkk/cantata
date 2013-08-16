@@ -559,9 +559,10 @@
 
 (defn force-pks
   "If the PK of entity `ent` is not already present in query map `eq`, and
-  there are to-many rels referred to, add the PK (or multiple PKs).
-  Returns [q env added-pks]."
+  there are to-many rels referred to, add the PK (or multiple PKs) to :select
+  and :order-by. Returns [q env added-select-pks]."
   [ent eq env]
+  ;; TODO: add and sort by nested PKs??
   (if (not-any? (comp #(some (comp :reverse :rel) %) :chain)
                 (vals env))
     [eq env] ;don't bother if there are no to-many rels
@@ -570,6 +571,11 @@
           add-pks (remove (set select) npk)
           eq (if (seq add-pks)
                (assoc eq :select (concat select add-pks))
+               eq)
+          order-by (:order-by eq)
+          add-order-pks (remove (set order-by) npk)
+          eq (if (seq add-order-pks)
+               (assoc eq :order-by (vec (concat order-by add-order-pks)))
                eq)]
       [eq env add-pks])))
 

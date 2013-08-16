@@ -268,6 +268,10 @@
   retrieving all related records, restrict the results using the :where clause,
   or use the `querym` function.
 
+  NOTE 2: if you do not select primary keys of nested relationships, you may
+  see maps with nil values that in actuality are absent SQL rows. To prevent
+  this, select the primary keys or use :with to force an inner join.
+
   Keyword options:
 
         :flat - do not nest results; results for the same primary key may be
