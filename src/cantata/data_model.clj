@@ -1,4 +1,7 @@
 (ns cantata.data-model
+  "Data model building and examination
+
+  See cantata.core for the main API entry point"
   (:refer-clojure :exclude [resolve])
   (:require [cantata.reflect :as reflect]
             [cantata.records :as r]
@@ -9,12 +12,14 @@
             [clojure.string :as string])
   (:import [cantata.records Entity Field Rel DataModel]))
 
-(defn normalize-spec [spec]
+(defn ^:private normalize-spec [spec]
   (cond
     (map? spec) spec
     (keyword? spec) {:name spec}))
 
-(defn make-field [m]
+(defn make-field
+  "Transform a field spec - a keyword or map - into a Field record"
+  [m]
   (let [m (normalize-spec m)]
     (when-not (:name m)
       (throw-info "No :name provided for field" {:rel-spec m}))
@@ -23,10 +28,12 @@
         m
         (assoc m :db-name (reflect/guess-db-name (:name m)))))))
 
-(defn guess-rel-key [rname]
+(defn ^:private guess-rel-key [rname]
   (keyword (str (name (cu/last-part rname)) "-id")))
 
-(defn make-rel [m & [other-ents]]
+(defn make-rel
+  "Transform a rel spec - a keyword or map - into a Rel record"
+  [m & [other-ents]]
   (let [m (normalize-spec m)]
     (when-not (:name m)
       (throw "No :name provided for rel" {:rel-spec m}))
@@ -42,7 +49,10 @@
                                        (assoc m :other-key (:pk (other-ents (:ename m)))))
                 (nil? (:reverse m)) (assoc :reverse false))))))
 
-(defn make-shortcut [m]
+(defn make-shortcut
+  "Transform a shortcut spec - a map or [path target-path] vector - into
+  a Shortcut record"
+  [m]
   (let [m (if (sequential? m)
             {:name (first m)
              :path (second m)}
@@ -59,7 +69,9 @@
     (om/ordered-map)
     maps))
 
-(defn make-entity [m]
+(defn make-entity
+  "Transform an entity spec - a map - into an Entity record"
+  [m]
   (when-not (:name m)
     (throw-info "No :name provided for entity"
                 {:entity-spec m}))
@@ -110,7 +122,7 @@
 
 (declare validate-data-model data-model? entities fields rels shortcuts)
 
-(defn normalize-entity-specs [specs]
+(defn ^:private normalize-entity-specs [specs]
   (if (data-model? specs)
     (for [ent (entities specs)]
       (let [m (into {} ent)]
@@ -124,6 +136,9 @@
       specs)))
 
 (defn make-data-model
+  "Transform a data model spec into a DataModel record
+
+  See `cantata.core/data-model` for full docs"
   ([entity-specs]
     (make-data-model nil entity-specs))
   ([name entity-specs]
@@ -150,7 +165,9 @@
         (validate-data-model
           (r/->DataModel name ents))))))
 
-(defn data-model? [x]
+(defn data-model?
+  "Returns true if x is a DataModel record"
+  [x]
   (instance? DataModel x))
 
 (defn ^:private merge-entity-specs [es1 es2]

@@ -1,7 +1,5 @@
 (ns cantata.query
-  "Implementation of query related features. Calling functions in this
-  namespace is not normally necessary unless you are extending Cantata or
-  have special requirements.
+  "Implementation of query related features
 
   Most functions besides those related to normalization operate on normalized
   query maps, not on the looser map/vector format accepted by cantata.core
