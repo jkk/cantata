@@ -76,7 +76,10 @@
                      :rels rels
                      :shortcuts shortcuts)
               (not (:db-name m)) (assoc :db-name (reflect/guess-db-name (:name m)))
-              (not (:pk m)) (assoc :pk pk)))))
+              (not (:pk m)) (assoc :pk pk)
+              (:validate m) (as-> m
+                                  (assoc-in m [:hooks :validate] (:validate m))
+                                  (dissoc m :validate))))))
 
 (defn ^:private reverse-rel-name [rel from]
   (keyword (str "_"
