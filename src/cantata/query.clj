@@ -558,10 +558,10 @@
 
 (defn force-pks
   "If the PK of entity `ent` is not already present in query map `eq`, and
-  there are to-many rels referred to, add the PK (or multiple PKs) to :select
-  and :order-by. Returns [q env added-select-pks]."
+  there are to-many rels referred to, add the PK (or multiple PKs) to :select.
+  Returns [q env added-select-pks]."
   [ent eq env]
-  ;; TODO: add and sort by nested PKs??
+  ;; TODO: add nested PKs??
   (if (not-any? (comp #(some (comp :reverse :rel) %) :chain)
                 (vals env))
     [eq env] ;don't bother if there are no to-many rels
@@ -570,11 +570,6 @@
           add-pks (remove (set select) npk)
           eq (if (seq add-pks)
                (assoc eq :select (concat select add-pks))
-               eq)
-          order-by (:order-by eq)
-          add-order-pks (remove (set order-by) npk)
-          eq (if (seq add-order-pks)
-               (assoc eq :order-by (vec (concat order-by add-order-pks)))
                eq)]
       [eq env add-pks])))
 
@@ -667,7 +662,7 @@
                  (first id-or-ids)
                  id-or-ids)]))))
 
-(defn ^:private next-row-group [[row & rows] key-fn]
+#_(defn ^:private next-row-group [[row & rows] key-fn]
   (when row
     (let [key (key-fn row)]
       (loop [group [row]
@@ -677,7 +672,7 @@
             (recur (conj group row2) (rest rows))
             [group rows]))))))
 
-(defn ^:private group-rows [rows key-fn]
+#_(defn ^:private group-rows [rows key-fn]
   (lazy-seq
     (when-let [[group rows] (next-row-group rows key-fn)]
       (cons group (group-rows rows key-fn)))))
@@ -765,7 +760,7 @@
                            info))]
         (into
           []
-          (for [group (group-rows rows key-fn)]
+          (for [group (vals (group-by key-fn rows))]
             (reduce
               (fn [m [rel-pk-cols rel-pp _ rel-pp-rev]]
                 (let [nest-pp (dropv (count path-parts) rel-pp)
