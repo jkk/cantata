@@ -10,6 +10,9 @@
 (defn guess-db-name [ename]
   (string/replace (name ename) "-" "_"))
 
+(defn guess-rel-key [rname]
+  (keyword (str (name (cu/last-part rname)) "-id")))
+
 (defn identifier [x & [prefix]]
   (let [x (if prefix
             (string/replace-first x prefix "")

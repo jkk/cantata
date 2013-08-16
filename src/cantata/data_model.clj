@@ -28,9 +28,6 @@
         m
         (assoc m :db-name (reflect/guess-db-name (:name m)))))))
 
-(defn ^:private guess-rel-key [rname]
-  (keyword (str (name (cu/last-part rname)) "-id")))
-
 (defn make-rel
   "Transform a rel spec - a keyword or map - into a Rel record"
   [m & [other-ents]]
@@ -43,7 +40,7 @@
         (cond-> m
                 (not ename) (assoc :ename name)
                 (and (not (:key m))
-                     (not (:reverse m))) (assoc :key (guess-rel-key name))
+                     (not (:reverse m))) (assoc :key (reflect/guess-rel-key name))
                 (and (not (:other-key m))
                      other-ents) (as-> m
                                        (assoc m :other-key (:pk (other-ents (:ename m)))))
@@ -177,7 +174,10 @@
     (for [name names]
       (merge (first (g1 name)) (first (g2 name))))))
 
-(defn reflect-data-model [ds entity-specs & opts]
+(defn reflect-data-model
+  "Examines the given data source to auto-generate entity specs, and merges
+  them with `entity-specs` (latter taking precedence)"
+  [ds entity-specs & opts]
   (make-data-model
     (let [especs (merge-entity-specs
                    (apply reflect/reflect-entities ds opts)
@@ -316,131 +316,6 @@
           (every? nil? (map :type fields)))))
   ([dm ename]
     (untyped? (entity dm ename))))
-
-;;;;
-
-(def ^:private type-parser-map
-  {:int cp/parse-int
-   :str cp/parse-str
-   :boolean cp/parse-boolean
-   :datetime cp/parse-datetime
-   :date cp/parse-date
-   :time cp/parse-time
-   :double cp/parse-double
-   :decimal cp/parse-decimal
-   :bytes cp/parse-bytes})
-
-(defn type-parser [type & {:keys [joda-dates]}]
-  (let [parse-datetime (if joda-dates
-                         cp/parse-joda-datetime
-                         cp/parse-datetime)
-        parse-date (if joda-dates
-                     cp/parse-joda-date
-                     cp/parse-date)
-        parse-time (if joda-dates
-                     cp/parse-joda-time
-                     cp/parse-time)]
-    (condp = type
-      :datetime parse-datetime
-      :date parse-date
-      :time parse-time
-      (or (type-parser-map type)
-          #(cpa/parse-value % type)))))
-
-(defn parse
-  [ent fnames values & {:keys [joda-dates ordered-map]}]
-  (let [fields (:fields ent)
-        parse-datetime (if joda-dates
-                         cp/parse-joda-datetime
-                         cp/parse-datetime)
-        parse-date (if joda-dates
-                     cp/parse-joda-date
-                     cp/parse-date)
-        parse-time (if joda-dates
-                     cp/parse-joda-time
-                     cp/parse-time)]
-    (loop [m (if ordered-map
-               (om/ordered-map)
-               {})
-           [fname & fnames] fnames
-           [v & values] values]
-      (if-not fname
-        m
-        (let [type (-> fname fields :type)
-              v* (try
-                   (case type
-                     :int (cp/parse-int v)
-                     :str (cp/parse-str v)
-                     :boolean (cp/parse-boolean v)
-                     :datetime (parse-datetime v)
-                     :date (parse-date v)
-                     :time (parse-time v)
-                     :double (cp/parse-double v)
-                     :decimal (cp/parse-decimal v)
-                     :bytes (cp/parse-bytes v)
-                     (cpa/parse-value v type))
-                   (catch Exception e
-                     (throw-info
-                       ["Failed to parse" fname "for entity" (:name ent)]
-                       {:problems [{:keys [fname] :msg "Invalid value"}]
-                        :value v})))
-              m* (assoc m fname v*)]
-          (recur m* fnames values))))))
-
-(defn make-row-parser [ent cols types & opts]
-  (let [idx-parsers
-        (into
-          [] (for [[idx type] (map-indexed list types)]
-               (let [parser (apply type-parser type opts)]
-                 [idx
-                  #(try
-                     (parser %)
-                     (catch Exception e
-                       (throw-info
-                         ["Failed to parse" (nth cols idx)
-                          "for entity" (:name ent)]
-                         {:problems [{:keys [(nth cols idx)]
-                                      :msg "Invalid value"}]
-                          :value %})))])))]
-    (fn [row]
-      (reduce
-        (fn [row [idx parser]]
-          (assoc row idx (parser (nth row idx))))
-        row
-        idx-parsers))))
-
-(defn marshal
-  ([ent values]
-    (let [[fnames values] (if (map? values)
-                            [(keys values) (vals values)]
-                            [(field-names ent) values])]
-      (marshal ent fnames values)))
-  ([ent fnames values]
-    (let [fields (:fields ent)]
-      (loop [m (om/ordered-map)
-             [fname & fnames] fnames
-             [v & values] values]
-        (if-not fname
-          m
-          (let [type (-> fname fields :type)
-                v* (try
-                     (case type
-                       :int (cp/parse-int v)
-                       :str (cp/parse-str v)
-                       :boolean (cp/parse-boolean v)
-                       :datetime (cp/parse-datetime v)
-                       :date (cp/parse-date v)
-                       :time (cp/parse-time v)
-                       :double (cp/parse-double v)
-                       :decimal (cp/parse-decimal v)
-                       :bytes (cp/parse-bytes v)
-                       (cpa/marshal-value v type))
-                     (catch Exception e
-                       (throw-info
-                         ["Failed to marshal" fname "for entity" (:name ent)]
-                         {:problems [{:keys [fname] :msg "Invalid value"}]})))
-                m* (assoc m fname v*)]
-            (recur m* fnames values)))))))
 
 ;;;;
 

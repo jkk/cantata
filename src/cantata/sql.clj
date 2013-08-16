@@ -4,6 +4,7 @@
             [cantata.query :as cq]
             [cantata.util :as cu :refer [throw-info]]
             [cantata.records :as r]
+            [cantata.parse :as cpa]
             [clojure.java.jdbc :as jd]
             [honeysql.core :as hq]
             [clojure.string :as string])
@@ -215,7 +216,7 @@
             types (into [] (for [f eselect]
                              (-> f env :resolved :value :type)))
             joda-dates? (cds/get-option ds :joda-dates)]
-        (comp (cdm/make-row-parser from-ent eselect types :joda-dates joda-dates?)
+        (comp (cpa/make-row-parser from-ent eselect types :joda-dates joda-dates?)
               ds-unmarshal))
       ds-unmarshal)))
 

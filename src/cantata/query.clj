@@ -9,6 +9,7 @@
   (:require [cantata.util :as cu :refer [throw-info]]
             [cantata.data-model :as dm]
             [cantata.records :as r]
+            [cantata.reflect :as reflect]
             [clojure.string :as string]
             [flatland.ordered.map :as om]))
 
@@ -352,9 +353,9 @@
   (let [{:keys [key other-key]} rel
         key (or key (if (:reverse rel)
                       (:pk from)
-                      (dm/guess-rel-key (:name rel))))
+                      (reflect/guess-rel-key (:name rel))))
         other-key (or other-key (if (:reverse rel)
-                                  (dm/guess-rel-key (:name from))
+                                  (reflect/guess-rel-key (:name from))
                                   (:pk to)))]
     [:=
      (cu/join-path from-alias key)

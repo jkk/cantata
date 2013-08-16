@@ -1,5 +1,7 @@
 (ns cantata.parse
-  (:require [cantata.protocols :as cp]))
+  (:require [cantata.protocols :as cp]
+            [cantata.util :refer [throw-info]]
+            [flatland.ordered.map :as om]))
 
 ;; For custom types
 (defmulti parse-value
@@ -53,6 +55,135 @@
     :decimal (cp/parse-decimal v)
     :bytes (cp/parse-bytes v)
     v))
+
+(def ^:private type-parser-map
+  {:int cp/parse-int
+   :str cp/parse-str
+   :boolean cp/parse-boolean
+   :datetime cp/parse-datetime
+   :date cp/parse-date
+   :time cp/parse-time
+   :double cp/parse-double
+   :decimal cp/parse-decimal
+   :bytes cp/parse-bytes})
+
+(defn ^:private type-parser [type & {:keys [joda-dates]}]
+  (let [parse-datetime (if joda-dates
+                         cp/parse-joda-datetime
+                         cp/parse-datetime)
+        parse-date (if joda-dates
+                     cp/parse-joda-date
+                     cp/parse-date)
+        parse-time (if joda-dates
+                     cp/parse-joda-time
+                     cp/parse-time)]
+    (condp = type
+      :datetime parse-datetime
+      :date parse-date
+      :time parse-time
+      (or (type-parser-map type)
+          #(parse-value % type)))))
+
+(defn parse
+  "See `cantata.core/parse`"
+  [ent fnames values & {:keys [joda-dates ordered-map]}]
+  (let [fields (:fields ent)
+        parse-datetime (if joda-dates
+                         cp/parse-joda-datetime
+                         cp/parse-datetime)
+        parse-date (if joda-dates
+                     cp/parse-joda-date
+                     cp/parse-date)
+        parse-time (if joda-dates
+                     cp/parse-joda-time
+                     cp/parse-time)]
+    (loop [m (if ordered-map
+               (om/ordered-map)
+               {})
+           [fname & fnames] fnames
+           [v & values] values]
+      (if-not fname
+        m
+        (let [type (-> fname fields :type)
+              v* (try
+                   (case type
+                     :int (cp/parse-int v)
+                     :str (cp/parse-str v)
+                     :boolean (cp/parse-boolean v)
+                     :datetime (parse-datetime v)
+                     :date (parse-date v)
+                     :time (parse-time v)
+                     :double (cp/parse-double v)
+                     :decimal (cp/parse-decimal v)
+                     :bytes (cp/parse-bytes v)
+                     (parse-value v type))
+                   (catch Exception e
+                     (throw-info
+                       ["Failed to parse" fname "for entity" (:name ent)]
+                       {:problems [{:keys [fname] :msg "Invalid value"}]
+                        :value v})))
+              m* (assoc m fname v*)]
+          (recur m* fnames values))))))
+
+(defn make-row-parser
+  "Returns a function that can parse a row of values according to the
+  corresponding types given"
+  [ent cols types & opts]
+  (let [idx-parsers
+        (into
+          [] (for [[idx type] (map-indexed list types)]
+               (let [parser (apply type-parser type opts)]
+                 [idx
+                  #(try
+                     (parser %)
+                     (catch Exception e
+                       (throw-info
+                         ["Failed to parse" (nth cols idx)
+                          "for entity" (:name ent)]
+                         {:problems [{:keys [(nth cols idx)]
+                                      :msg "Invalid value"}]
+                          :value %})))])))]
+    (fn [row]
+      (reduce
+        (fn [row [idx parser]]
+          (assoc row idx (parser (nth row idx))))
+        row
+        idx-parsers))))
+
+(defn marshal
+  "Return an entity values map with all values marshalled in preparation for
+  sending to the data source"
+  ([ent values]
+    (let [[fnames values] (if (map? values)
+                            [(keys values) (vals values)]
+                            [(keys (:fields ent)) values])]
+      (marshal ent fnames values)))
+  ([ent fnames values]
+    (let [fields (:fields ent)]
+      (loop [m (om/ordered-map)
+             [fname & fnames] fnames
+             [v & values] values]
+        (if-not fname
+          m
+          (let [type (-> fname fields :type)
+                v* (try
+                     (case type
+                       :int (cp/parse-int v)
+                       :str (cp/parse-str v)
+                       :boolean (cp/parse-boolean v)
+                       :datetime (cp/parse-datetime v)
+                       :date (cp/parse-date v)
+                       :time (cp/parse-time v)
+                       :double (cp/parse-double v)
+                       :decimal (cp/parse-decimal v)
+                       :bytes (cp/parse-bytes v)
+                       (marshal-value v type))
+                     (catch Exception e
+                       (throw-info
+                         ["Failed to marshal" fname "for entity" (:name ent)]
+                         {:problems [{:keys [fname] :msg "Invalid value"}]})))
+                m* (assoc m fname v*)]
+            (recur m* fnames values)))))))
 
 ;;;;
 

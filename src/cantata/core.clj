@@ -6,6 +6,7 @@
             [cantata.records :as r]
             [cantata.query :as cq]
             [cantata.sql :as sql]
+            [cantata.parse :as cpa]
             [clojure.java.jdbc :as jd]
             [flatland.ordered.map :as om]))
 
@@ -516,7 +517,7 @@
   validate! resolve-path)
 
 (defn parse
-  "Parses a map or sequence of field names and correspond values into an
+  "Parses a map or sequence of field names and corresponding values into an
   entity values map, using field types to guide parsing. Takes data source
   options (such as Joda dates) into consideration."
   ([ds ename-or-ent values]
@@ -534,7 +535,7 @@
                 (cdm/entity dm ename-or-ent)
                 ename-or-ent)
           joda-dates? (cds/get-option ds :joda-dates)]
-      (cdm/parse ent fnames values :joda-dates joda-dates?))))
+      (cpa/parse ent fnames values :joda-dates joda-dates?))))
 
 (defn problem
   "Creates and returns a problem map with optional keys and msg. Validation
@@ -561,7 +562,7 @@
 (defn ^:private prep-map [ent m validate?]
   (let [m (->> m
             (get-own-map ent)
-            (cdm/marshal ent))]
+            (cpa/marshal ent))]
     (when-not (false? validate?)
       (cdm/validate! ent m))
     m))
