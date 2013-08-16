@@ -566,7 +566,7 @@
                 (vals env))
     [eq env] ;don't bother if there are no to-many rels
     (let [npk (dm/normalize-pk (:pk ent))
-          select (:select eq)
+          select (map (comp :final-path env) (:select eq))
           add-pks (remove (set select) npk)
           eq (if (seq add-pks)
                (assoc eq :select (concat select add-pks))
