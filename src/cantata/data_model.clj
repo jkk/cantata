@@ -175,73 +175,102 @@
 
 ;;;;
 
-(defn entities [dm]
+(defn entities
+  "Returns all Entity records in the data model"
+  [dm]
   (vals (:entities dm)))
 
-(defn entity [dm ename]
+(defn entity
+  "Returns the Entity record with the given name in the data model"
+  [dm ename]
   (get-in dm [:entities ename]))
 
-(defn entity? [x]
+(defn entity?
+  "Returns true if x is an Entity record"
+  [x]
   (instance? Entity x))
 
 (defn fields
+  "Returns all Field records for the given entity or entity name in the data
+  model"
   ([ent]
     (vals (:fields ent)))
   ([dm ename]
     (fields (entity dm ename))))
 
 (defn field-names
+  "Returns the names of all fields for the given entity or entity name in the
+  data model"
   ([ent]
     (keys (:fields ent)))
   ([dm ename]
     (field-names (entity dm ename))))
 
 (defn field
+  "Returns the Field record with the given name in the given entity or entity
+  name in the data model"
   ([ent fname]
     (get-in ent [:fields fname]))
   ([dm ename fname]
     (field (entity dm ename) fname)))
 
-(defn field? [x]
+(defn field?
+  "Returns true if x is a Field record"
+  [x]
   (instance? Field x))
 
 (defn rels
+  "Returns all Rel records for the given entity or entity name in the data
+  model"
   ([ent]
     (remove nil? (vals (:rels ent))))
   ([dm ename]
     (rels (entity dm ename))))
 
 (defn rel
+  "Returns the Rel record with the given name in the given entity or entity
+  name in the data model"
   ([ent rname]
     (get-in ent [:rels rname]))
   ([dm ename rname]
     (rel (entity dm ename) rname)))
 
-(defn rel? [x]
+(defn rel?
+  "Returns true if x is a Rel record"
+  [x]
   (instance? Rel x))
 
 (defn shortcuts
+  "Returns all Shortcut records in the data model"
   ([ent]
     (vals (:shortcuts ent)))
   ([dm ename]
     (shortcuts (entity dm ename))))
 
 (defn shortcut
+  "Return the Shortcut record with the given name for the given entity or
+  entity name in the data model"
   ([ent sname]
     (get-in ent [:shortcuts sname]))
   ([dm ename sname]
     (shortcut (entity dm ename) sname)))
 
 (defn hook
+  "Return the hook function with the given name for the given entity in the
+  data model"
   ([ent hname]
     (get-in ent [:hooks hname]))
   ([dm ename hname]
     (hook (entity dm ename) hname)))
 
-(defn normalize-pk [pk]
+(defn normalize-pk
+  "Wraps pk in a collection if it's not already one"
+  [pk]
   (cu/seqify pk))
 
-(defn pk-val [m pk]
+(defn pk-val
+  "Fetch the (singular or sequential) primary key value from map `m`"
+  [m pk]
   (if (sequential? pk)
     (mapv m pk)
     (pk m)))
@@ -259,6 +288,7 @@
            (take num-pk (filter (set pk) m-or-fields)))))))
 
 (defn untyped?
+  "Returns true if none of the fields in the entity have types"
   ([ent]
     (let [fields (fields ent)]
       (or (empty? fields)
@@ -404,11 +434,15 @@
 
 ;;;;
 
-(defn invoke-hook [ent hname & args]
+(defn invoke-hook
+  [ent hname & args]
   (when-let [hf (hook ent hname)]
     (apply hf ent args)))
 
 (defn validate!
+  "Invoke the :validate hook on the entity, passing it the given map of values.
+  If validation fails (i.e., the validation function returns problem maps),
+  throws an ExceptionInfo instance with the :problems and :values keys set."
   ([ent m]
     (let [problems (invoke-hook ent :validate m)]
       (when (and problems (not (and (sequential? problems)
@@ -421,6 +455,8 @@
 ;;;;
 
 (defn resolve
+  "Resolve an unqualified keyword path relative to an entity. Returns a Resolved
+  record or nil."
   ([ent xname]
     (if-let [f (field ent xname)]
       (r/->Resolved :field f)
@@ -433,7 +469,11 @@
   ([dm ename xname]
     (resolve (entity dm ename) xname)))
 
-(defn resolve-path [dm ename-or-entity path & {:keys [lax]}]
+(defn resolve-path
+  "Resolve a qualified or unqualified keyword path relative to an entity. If
+  :lax is true, pretends unresolved path tips refer to entity fields. Returns
+  a ResolvedPath record or nil."
+  [dm ename-or-entity path & {:keys [lax]}]
   (let [root (if (keyword? ename-or-entity)
                (entity dm ename-or-entity)
                ename-or-entity)]

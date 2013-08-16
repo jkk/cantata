@@ -9,52 +9,139 @@
             [clojure.java.jdbc :as jd]
             [flatland.ordered.map :as om]))
 
+(defn make-data-model
+  "Transforms an entity specification into a DataModel record.
+
+  `name` is an optional keyword name of the data model.
+
+  `entity-specs` can be map, with entity names as keys and maps describing
+  the entity as values; or a collection of maps describing the entities.
+
+  Example (map format):
+
+    {:film       {:fields [:id :title]
+                  :shortcuts {:actor :film-actor.actor}}
+     :actor      {:fields [:id :name]}
+     :film-actor {:fields [:film-id :actor-id]
+                  :pk [:film-id :actor-id]
+                  :rels [:film :actor]}}
+
+  The entity map will be transformed into an Entity record using the
+  following keys:
+
+         :name - entity name, a keyword (optional for map format)
+           :pk - name(s) of primary key field(s); default: name of first field
+       :fields - optional collection of field specs; see below for format
+         :rels - optional collection of rel specs; see below for format
+    :shortcuts - optional map of shortcuts; see below for format
+     :validate - optional function to validate a entity values map; called
+                 prior to inserting or updating; expected to return problem
+                 map(s) on validation failure; see `problem`
+        :hooks - optional map of hooks; see below for format
+      :db-name - string name of corresponding table in SQL database;
+                 default: entity name with dashes converted to underscores
+    :db-schema - optional string name of table schema in SQL database
+
+  Field specs can be keywords or maps. A keyword is equivalent to a map with
+  only the :name key set. The following map keys are accepted:
+
+         :name - field name, a keyword
+         :type - optional data type; built-in options:
+
+                   :int :str :boolean :double :decimal :bytes
+                   :datetime :date :time
+
+      :db-name - string name of corresponding column in SQL database;
+                 default: field name with dashes converted to underscores
+      :db-type - optional string type of corresponding column in SQL database
+
+  Relationship (rel) specs can be keywords or maps. A keyword is equivalent to
+  a map with only the :name key set. The following map keys are accepted:
+
+         :name - rel name, a keyword
+        :ename - name of related entity; default: rel name
+          :key - name of foreign key field; default: rel name + \"-id\" suffix
+    :other-key - name of referenced key on related entity; default: primary
+                 key of related entity
+      :reverse - boolean indicating whether the foreign key is on this or
+                 the other table
+
+  Reverse relationships will be automatically added to related entities
+  referenced in rel specs, using the name of the former entity as the rel name.
+  If there is more than one reverse relationship created with the same name,
+  each will be prefixed with an underscore and the name of the relationship
+  to ensure uniqueness, like so: :_rel-name.entity-name.
+
+  Shortcuts take the form of a map of shortcut path to target path. Target
+  paths can point to rels or fields.
+
+  Hooks take form of hook name to hook function. Available hooks:
+
+    :validate :before-save :after-save :before-update :after-update
+    :before-delete :after-delete"
+  ([entity-specs]
+    (make-data-model nil entity-specs))
+  ([name entity-specs]
+    (cdm/make-data-model name entity-specs)))
+
 (defn data-source
   "Create and return a data source map. The returned map will be compatible
   with both Cantata and clojure.java.jdbc.
 
             db-spec - a clojure.java.jdbc-compatible spec
-         model-spec - data model spec
+       entity-specs - optional DataModel record or entity specs; when provided,
+                      entity-specs will transformed into a DataModel; see
+                     `make-data-model` for format; will be merged with and
+                      take precedence over reflected entity specs
 
   Keyword options (all default to false unless otherwise noted):
 
            :reflect - generate a data model from the data source automatically;
-                      can be used in combination model-spec, the latter taking
-                      precedence
+                      can be used in combination with entity-specs, the latter
+                      taking precedence
             :pooled - create and return a pooled data source
         :joda-dates - return Joda dates for all queries
-          :clob-str - convert all CLOB values returned by queries to String
+          :clob-str - convert all CLOB values returned by queries to strings
         :blob-bytes - convert all BLOB values returned by queries to byte
                       arrays
     :unordered-maps - return unordered hash maps for all queries
+      :table-prefix - optional table prefix to remove from reflected table names
+     :column-prefix - optional column prefix to remove from reflected column
+                      names
            :quoting - identifier quoting style to use; auto-detects if
                       left unspecified; set to nil to turn off quoting (this
-                      will break many queries)
+                      will break many queries); :ansi, :mysql, or :sqlserver
           :max-idle - max pool idle time in seconds; default 30 mins
    :max-idle-excess - max pool idle time for excess connections, in seconds;
-                      default 3 hours"
-  [db-spec model-spec & opts]
-  (apply cds/data-source db-spec model-spec opts))
+                      default 3 hours
+
+  Wrap your data-source call in `delay` to prevent reflection or pool creation
+  from happening at compile time. Cantata will call `force` on the delay when
+  it's used."
+  [db-spec & entity-specs+opts]
+  (apply cds/data-source db-spec entity-specs+opts))
 
 (defn build
   "Builds a query from the given arguments, which can be zero or more maps
   followed by zero or more keyword-value clauses. For example:
 
-    (build {:from :film} :select :title :limit 1)
+    (build {:from :film} :select [:title :actor.name] :limit 1)
 
-  Officially supported clauses:
+  Any paths to related entities mentioned throughout the query will trigger
+  joins when the query is executed.
+
+  Supported clauses:
 
          :from - name of the entity to query
-       :select - paths of fields, relationships, or aggregates to select.
-                 Unlike SQL, unqualified names will be assumed to refer to
-                 the :from entity
-        :where - predicate that results must match
-     :order-by - field names to sort results by. E.g., :title or
+       :select - wildcards or paths of fields, relationships, or aggregates to
+                 select; unlike SQL, unqualified names will be assumed to refer
+                 to the :from entity
+        :where - predicate to narrow the result set; see below for format
+     :order-by - field names to sort results by; e.g., :title or
                  [[:title :desc] :release-year]
         :limit - integer that limits the number of results
        :offset - integer offset into result set
-     :group-by - fields to group results by; works best with flat queries.
-                 Forbidden for certain multi-queries
+     :group-by - fields to group results by; forbidden for certain multi-queries
        :having - like :where but performed after :group-by
     :modifiers - one or more keyword modifiers:
                    :distinct - return distinct results
@@ -65,12 +152,22 @@
          :with - like :include but performs an inner join
       :without - return results that have no related entity records for the
                  provided relationship names
-         :join - explicit inner join. E.g., [[foo :f] [:= :id :f.id]]
+         :join - explicit inner join; e.g., [[foo :f] [:= :id :f.id]]
     :left-join - explicit left outer join
       :options - a map with the following optional keys:
                    :join-type - whether to perform an :outer (the default) or
                                 :inner join for fields selected from related
                                 entities
+
+  Predicates are vectors of the form [op arg1 arg2 ...], where args are
+  paths, other predicates, etc. Built-in ops:
+
+    :and :or and :xor
+    := :not= :< :<= :> :>=
+    :in :not-in :like :not-like :between
+    :+ :- :* :/ :% :mod :| :& :^
+
+  Example predicate: [:and [:= \"Drama\" :category.name] [:< 90 :length 180]]
 
   Aggregates are keywords that begin with % - e.g., :%count.actor.id
 
@@ -91,7 +188,7 @@
 (defmacro with-query-rows
   "Evaluates body after executing a query against a data source and binding
   column names and row results to the symbols designated by `cols` and `rows`,
-  respectively. See buildq for query format."
+  respectively. See `build` for query format."
   [cols rows ds q & body]
   `(with-query-rows* ~ds ~q (fn [~cols ~rows]
                               ~@body)))
@@ -111,7 +208,7 @@
 
 (defmacro with-query-maps
   "Evaluates body after executing a query against a data source and binding
-  result maps to the symbol designated by `maps`. See buildq for query format."
+  result maps to the symbol designated by `maps`. See `build` for query format."
   [maps ds q & body]
   `(with-query-maps* ~ds ~q (fn [~maps]
                               ~@body)))
@@ -154,8 +251,8 @@
 
   The query can be one of the following:
 
-     * Query map/vector - see buildq for format
-     * PreparedQuery record - see prepare-query
+     * Query map/vector - see `build` for format
+     * PreparedQuery record - see `prepare-query`
      * SQL string
      * clojure.java.jdbc-style [sql params] vector
 
@@ -163,13 +260,12 @@
   for values selected from related entities. Example:
 
     (query ds {:from :film :select [:title :actor.name] :where [:= 1 :id]})
-
     => [{:title \"Lawrence of Arabia\"
          :actor [{:name \"Peter O'Toole\"} {:name \"Omar Sharif\"}]}]
 
   NOTE: using the :limit clause may truncate nested values from to-many
   relationships. To limit your query to a single top-level entity record while
-  retrieving all related values, restrict the results using the :where clause,
+  retrieving all related records, restrict the results using the :where clause,
   or use the `querym` function.
 
   Keyword options:
@@ -180,6 +276,7 @@
      :vectors - return results as a vector of [cols rows], where cols is a
                 vector of column names, and rows is a sequence of vectors with
                 values for each column
+      :params - map of bindable param names to values
     :force-pk - prevent Cantata from implicitly including the entity's
                 primary key in the low-level database query when to-many
                 relationships are selected (which it does to make nesting more
@@ -212,8 +309,8 @@
 
 (defn by-id
   "Fetches the entity record from the data source whose primary key value is
-  equal to `id`. Uses querym1 to execute the query, so multiple round trips to
-  the data source may occur. Query clauses from `q` will be merged into the
+  equal to `id`. Uses `querym1` to execute the query, so multiple round trips
+  to the data source may occur. Query clauses from `q` will be merged into the
   generated query."
   [ds ename id & [q & opts]]
   (let [ent (cdm/entity (cds/get-data-model ds) ename)
@@ -234,8 +331,7 @@
     (getf :actor.name results)
     (getf results :actor.name)
   
-  If invoked with one argument, returns a partial function that calls `getf` on
-  its argument."
+  If invoked with one argument, returns a partial function."
   ([path]
     #(getf % path))
   ([qr path]
@@ -268,8 +364,7 @@
     (getf1 :actor.name results)
     (getf1 results :actor.name)
 
-  If invoked with one argument, returns a partial function that calls `getf1`
-  on its argument."
+  If invoked with one argument, returns a partial function."
   ([path]
     #(getf1 % path))
   ([qr path]
@@ -304,7 +399,7 @@
 ;;;;
 
 (defn expand-query
-  "Given a data source, data model, and query, expands any implicit joins
+  "Given a data source or data model, and a query, expands any implicit joins
   and wildcards. Returns a vector of the expanded query and a map of
   resolved paths."
   [ds-or-dm q & opts]
@@ -315,8 +410,8 @@
     (apply cq/expand-query dm q opts)))
 
 (defn to-sql
-  "Returns SQL for the given query (as normally generated by the query
-  function)"
+  "Returns a clojure.java.jdbc-compatible [sql params] vector for the given
+  query."
   [ds-or-dm q & opts]
   (let [[ds dm] (if (cdm/data-model? ds-or-dm)
                   [nil ds-or-dm]
@@ -327,10 +422,14 @@
            :quoting (when ds (cds/get-quoting ds))
            opts)))
 
-(defn prepare
+(defn prepare-query
   "Return a PreparedQuery record, which contains ready-to-execute SQL and
-  optional bindable parameters (which can be included in queries using keywords
-  like :?actor-name)."
+  other necessary meta data. When executed, the query will accept bindable
+  parameters. (Bindable paramters can be included in queries using keywords
+  like :?actor-name.)
+
+  Unlike a JDBC PreparedStatement, a PreparedQuery record contains no
+  connection-specific information and can be reused at any time."
   [ds q & opts]
   (apply sql/prepare (force ds) (cds/get-data-model ds) q opts))
 
@@ -378,6 +477,7 @@
   logging information during execution. See also `debug`"
   [& body]
   `(binding [cu/*verbose* true]
+     ;; Hack
      (with-redefs [jd/db-do-prepared sql/db-do-prepared-hook
                    jd/db-do-prepared-return-keys sql/db-do-prepared-return-keys-hook]
        ~@body)))
@@ -398,15 +498,20 @@
 (defmacro ^:private def-dm-helpers [& fn-names]
   `(do
      ~@(for [fn-name fn-names]
-         `(defn ~fn-name [~'ds ~'& ~'args]
-            (apply ~(symbol "cdm" (name fn-name))
-                   (cds/get-data-model ~'ds) ~'args)))))
+         (let [fn-sym (symbol "cdm" (name fn-name))
+               fn-meta (meta (resolve fn-sym))]
+           `(defn ~fn-name ~(:doc fn-meta "") [~'ds ~'& ~'args]
+              (apply ~fn-sym
+                     (cds/get-data-model ~'ds) ~'args))))))
 
-(def-dm-helpers
+(def-dm-helpers ;being lazy
   entities entity rels rel fields field field-names shortcut shortcuts
   validate! resolve-path)
 
 (defn parse
+  "Parses a map or sequence of field names and correspond values into an
+  entity values map, using field types to guide parsing. Takes data source
+  options (such as Joda dates) into consideration."
   ([ds ename-or-ent values]
     (let [dm (cds/get-data-model ds)
           ent (if (keyword? ename-or-ent)
@@ -425,9 +530,11 @@
       (cdm/parse ent fnames values :joda-dates joda-dates?))))
 
 (defn problem
+  "Creates and returns a problem map with optional keys and msg. Validation
+  functions can use this to describe validation problems."
   ([keys-or-msg]
     (let [[keys msg] (if (sequential? keys-or-msg)
-                        [keys-or-msg]
+                        [keys-or-msg "Invalid value"]
                         [nil keys-or-msg])]
       (problem keys msg)))
   ([keys msg]
@@ -474,7 +581,14 @@
                 (cq/nest-in m qual-parts qual-revs rel-maps)))
             m many-results))))))
 
-(defn querym [ds q & opts]
+(defn querym
+  "Like `query` but may perform multiple data source round trips - one for
+  each selected second-level path segment that is part of a path that contains
+  a to-many relationship. Primary keys of the top-level entity results are used
+  to fetch the related results. 
+
+  :limit and :where clauses apply only to the top-level entity query."
+  [ds q & opts]
   (when (sql/plain-sql? q)
     (throw-info "querym cannot execute plain SQL queries; use query instead" {:q q}))
   (when (sql/prepared? q)
@@ -508,7 +622,7 @@
                   (some #(= :agg-op (-> % env :resolved :type))
                         many-fields)))
      (throw-info
-       "Multi-queries do not support aggregates or group-by for to-many-related fields"
+       "Multi-queries do not support aggregates or group-by on fields from to-many rels"
        {:q q}))
     (let [maps (fetch-one-maps ds eq one-fields any-many? opts)
           maps (if-not any-many?
@@ -531,7 +645,7 @@
 ;;;;
 
 (defn ^:private get-own-map
-  "Returns a map with only the fields of the entity itself - no related
+  "Returns a map with only the fields of the top-level entity - no related
   fields."
   [ent m & {:as opts}]
   (let [fnames (cdm/field-names ent)]
@@ -548,7 +662,7 @@
     m))
 
 (defn insert!
-  "Inserts an entity map or maps into the data source. Unlike save, the
+  "Inserts an entity map or maps into the data source. Unlike `save!`, the
   maps may not include related entity maps.
 
   Set :validate to false to prevent validation.
@@ -781,6 +895,9 @@
 
   The map may include nested, related maps, which will in turn be saved and
   associated with the top-level record. All saves happen within a transaction.
+
+  Values will be marshalled before being sent to the database. Joda dates,
+  for example, will be converted to java.sql dates.
 
   Returns the primary key of the updated or inserted record.
 
