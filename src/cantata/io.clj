@@ -38,6 +38,9 @@
             (if (map? line)
               (let [{:keys [ename cols]} line
                     ent (cdm/entity dm ename)]
+                (when-not ent
+                  (throw-info ["Unrecognized entity" ename]
+                              {:line line :cols cols :ename ename}))
                 (when cu/*verbose*
                   (println "Importing" ename))
                 (recur ent cols (rest lines)))
