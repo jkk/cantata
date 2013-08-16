@@ -100,6 +100,9 @@
                       can be used in combination with entity-specs, the latter
                       taking precedence
             :pooled - create and return a pooled data source
+           :init-fn - function to initialize the data source; will be called
+                      before reflection and data model creation; the data
+                      source map will be passed as the argument
         :joda-dates - return Joda dates for all queries
           :clob-str - convert all CLOB values returned by queries to strings
         :blob-bytes - convert all BLOB values returned by queries to byte

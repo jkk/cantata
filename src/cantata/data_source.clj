@@ -73,20 +73,22 @@
         ds (if (:pooled opts)
              (create-pool (merge ds opts))
              ds)
-        dm (if (:reflect opts)
-             (apply cdm/reflect-data-model ds dm (apply concat opts))
-             (when dm
-               (if (cdm/data-model? dm)
-                 dm
-                 (cdm/make-data-model dm))))]
-    (assoc ds
-           ::data-model dm
-           ::options opts
-           ::quoting (if (contains? opts :quoting)
-                       (:quoting opts)
-                       (detect-quoting ds))
-           ::marshaller (make-marshalling-fn opts marshal-fnmap)
-           ::unmarshaller (make-marshalling-fn opts unmarshal-fnmap))))
+        ds (assoc ds
+                  ::options opts
+                  ::quoting (if (contains? opts :quoting)
+                              (:quoting opts)
+                              (detect-quoting ds))
+                  ::marshaller (make-marshalling-fn opts marshal-fnmap)
+                  ::unmarshaller (make-marshalling-fn opts unmarshal-fnmap))]
+    (when-let [init (:init-fn opts)]
+      (init ds))
+    (let [dm (if (:reflect opts)
+               (apply cdm/reflect-data-model ds dm (apply concat opts))
+               (when dm
+                 (if (cdm/data-model? dm)
+                   dm
+                   (cdm/make-data-model dm))))]
+      (assoc ds ::data-model dm))))
 
 (defn get-data-model [ds]
   (::data-model (force ds)))
