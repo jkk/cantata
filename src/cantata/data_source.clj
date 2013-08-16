@@ -72,22 +72,21 @@
         ds (normalize-db-spec db-spec)
         ds (if (:pooled opts)
              (create-pool (merge ds opts))
-             db-spec)
+             ds)
         dm (if (:reflect opts)
              (apply cdm/reflect-data-model ds dm (apply concat opts))
              (when dm
                (if (cdm/data-model? dm)
                  dm
-                 (cdm/make-data-model dm))))
-        ds (assoc ds
-                  ::options opts
-                  ::quoting (if (contains? opts :quoting)
-                                 (:quoting opts)
-                                 (detect-quoting ds))
-                  ::marshaller (make-marshalling-fn opts marshal-fnmap)
-                  ::unmarshaller (make-marshalling-fn opts unmarshal-fnmap))]
-    (cond-> ds
-            dm (assoc ::data-model dm))))
+                 (cdm/make-data-model dm))))]
+    (assoc ds
+           ::data-model dm
+           ::options opts
+           ::quoting (if (contains? opts :quoting)
+                       (:quoting opts)
+                       (detect-quoting ds))
+           ::marshaller (make-marshalling-fn opts marshal-fnmap)
+           ::unmarshaller (make-marshalling-fn opts unmarshal-fnmap))))
 
 (defn get-data-model [ds]
   (::data-model (force ds)))
