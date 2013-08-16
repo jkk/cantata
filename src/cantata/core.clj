@@ -46,7 +46,7 @@
   only the :name key set. The following map keys are accepted:
 
          :name - field name, a keyword
-         :type - optional data type; built-in options:
+         :type - optional data type; built-in types:
 
                    :int :str :boolean :double :decimal :bytes
                    :datetime :date :time

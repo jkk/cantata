@@ -3,6 +3,7 @@
   (:require [cantata.reflect :as reflect]
             [cantata.records :as r]
             [cantata.protocols :as cp]
+            [cantata.parse :as cpa]
             [cantata.util :as cu :refer [throw-info]]
             [flatland.ordered.map :as om]
             [clojure.string :as string])
@@ -298,12 +299,6 @@
 
 ;;;;
 
-;; For custom types
-(defmulti parse-value (fn [v type] type))
-
-(defmethod parse-value :default [v type]
-  v)
-
 (def ^:private type-parser-map
   {:int cp/parse-int
    :str cp/parse-str
@@ -330,7 +325,7 @@
       :date parse-date
       :time parse-time
       (or (type-parser-map type)
-          #(parse-value % type)))))
+          #(cpa/parse-value % type)))))
 
 (defn parse
   [ent fnames values & {:keys [joda-dates ordered-map]}]
@@ -363,7 +358,7 @@
                      :double (cp/parse-double v)
                      :decimal (cp/parse-decimal v)
                      :bytes (cp/parse-bytes v)
-                     (parse-value v type))
+                     (cpa/parse-value v type))
                    (catch Exception e
                      (throw-info
                        ["Failed to parse" fname "for entity" (:name ent)]
@@ -394,11 +389,6 @@
         row
         idx-parsers))))
 
-(defmulti marshal-value (fn [v type] type))
-
-(defmethod marshal-value :default [v type]
-  v)
-
 (defn marshal
   ([ent values]
     (let [[fnames values] (if (map? values)
@@ -424,7 +414,7 @@
                        :double (cp/parse-double v)
                        :decimal (cp/parse-decimal v)
                        :bytes (cp/parse-bytes v)
-                       (marshal-value v type))
+                       (cpa/marshal-value v type))
                      (catch Exception e
                        (throw-info
                          ["Failed to marshal" fname "for entity" (:name ent)]
