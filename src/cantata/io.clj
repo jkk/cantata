@@ -25,30 +25,46 @@
             (doseq [row rows]
               (prn (mapv cp/joda->date row)))))))))
 
+(defn ^:private import-batches [ent cols lines batch-size save-fn]
+  (loop [batch []
+         lines (rest lines)]
+    (let [line (edn/read-string (first lines))]
+      (cond
+        ;; finished with this entity
+        (or (not line) (map? line))
+        (do
+          (save-fn ent batch)
+          lines)
+        ;; finished batch
+        (= batch-size (count batch))
+        (do
+          (save-fn ent batch)
+          (recur [] lines))
+        ;; keep collecting lines for this batch
+        (vector? line)
+        (recur (conj batch (zipmap cols line)) (rest lines))
+        ;; bad data
+        :else
+        (throw-info "Invalid row"
+                    {:line line :cols cols :ename (:name ent)})))))
+
 (defn import-data!
   "Imports entity data from in - a filename, File, etc. Set :update to true to
   check for presence of each record and, if present, update instead of insert."
-  [ds in & {:keys [update]}]
-  (let [save-fn (if update c/save! c/insert!)]
+  [ds in & {:keys [update batch-size] :or {batch-size 100}}]
+  (let [save-fn (if update
+                  (fn [ent ms] (doseq [m ms] (c/save! ds (:name ent) m)))
+                  (fn [ent ms] (c/insert! ds (:name ent) ms)))
+        dm (cds/get-data-model ds)]
     (with-open [r (io/reader in)]
-      (let [dm (cds/get-data-model ds)]
-        (loop [ent nil
-               cols nil
-               lines (line-seq r)]
-          (when (seq lines)
-            (let [line (edn/read-string (first lines))]
-              (if (map? line)
-                (let [{:keys [ename cols]} line
-                      ent (cdm/entity dm ename)]
-                  (when-not ent
-                    (throw-info ["Unrecognized entity" ename]
-                                {:line line :cols cols :ename ename}))
-                  (when cu/*verbose*
-                    (println "Importing" ename))
-                  (recur ent cols (rest lines)))
-                (do
-                  (when-not (and ent cols (sequential? line))
-                    (throw-info "Invalid data file format"
-                                {:line line :cols cols :ent ent}))
-                  (save-fn ds (:name ent) (zipmap cols line))
-                  (recur ent cols (rest lines)))))))))))
+      (loop [lines (line-seq r)]
+        (when-let [line (edn/read-string (first lines))]
+          (let [{:keys [ename cols]} line
+                ent (cdm/entity dm ename)]
+            (when-not ent
+              (throw-info ["Unrecognized entity" ename]
+                          {:line line :cols cols :ename ename}))
+            (when cu/*verbose*
+              (println "Importing" ename))
+            (when-let [lines* (seq (import-batches ent cols lines batch-size save-fn))]
+              (recur lines*))))))))
