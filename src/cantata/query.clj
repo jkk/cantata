@@ -836,7 +836,9 @@
                     [path qr])]
       (or
         (path qr)
-        (let [ks (cu/split-path path)]
+        (let [ks (if (agg? path)
+                   [path]
+                   (cu/split-path path))]
           (reduce
             (fn [maps k]
               (if (sequential? maps)
