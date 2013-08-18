@@ -367,8 +367,8 @@
 
 (defn db-do-prepared-return-keys-hook
   ([db sql param-group]
-    (prn (into [sql] param-group))
     (db-do-prepared-return-keys db sql param-group))
   ([db transaction? sql param-group]
-    (prn (into [sql] param-group))
+    (when (jd/db-find-connection db)
+      (prn (into [sql] param-group)))
     (db-do-prepared-return-keys db transaction? sql param-group)))
