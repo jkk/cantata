@@ -26,15 +26,17 @@
    "sqlserver" :sqlserver
    "jtds:sqlserver" :sqlserver})
 
+(defn get-subprotocol [db-spec]
+  (or (:subprotocol db-spec)
+      (let [ds (:datasource db-spec)]
+        (when (and ds (instance? ComboPooledDataSource ds))
+          (let [url (.getJdbcUrl ^ComboPooledDataSource ds)]
+            (second (re-find #"^([^:]+):"
+                             (string/replace url #"^jdbc:" ""))))))))
+
 (defn detect-quoting [db-spec]
-  (if-let [subprot (:subprotocol db-spec)]
-    (subprotocol->quoting subprot)
-    (let [ds (:datasource db-spec)]
-      (when (and ds (instance? ComboPooledDataSource ds))
-        (let [url (.getJdbcUrl ^ComboPooledDataSource ds)]
-          (when-let [subprot (second (re-find #"^([^:]+):"
-                                              (string/replace url #"^jdbc:" "")))]
-            (subprotocol->quoting subprot)))))))
+  (when-let [subprot (get-subprotocol db-spec)]
+    (subprotocol->quoting subprot)))
 
 ;; TODO: more customizable options
 (defn create-pool [spec]
