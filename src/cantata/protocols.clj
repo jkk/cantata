@@ -212,6 +212,171 @@
   nil
   (parse-joda-datetime [_] nil))
 
+;;;;
+
+(defprotocol MarshalInt
+  (marshal-int [x]))
+
+(extend-protocol MarshalInt
+  Long
+  (marshal-int [x] x)
+  Number
+  (marshal-int [x] (long x))
+  String
+  (marshal-int [x] (Long/valueOf x))
+  Character
+  (marshal-int [x] (Character/getNumericValue x))
+  java.util.Date
+  (marshal-int [x] (.getTime x))
+  DateTime
+  (marshal-int [x] (.getMillis x))
+  LocalDate
+  (marshal-int [x] (.getTime ^java.util.Date (.toDate x)))
+  nil
+  (marshal-int [_] nil))
+
+(defprotocol MarshalStr
+  (marshal-str [x]))
+
+(extend-protocol MarshalStr
+  String
+  (marshal-str [x] x)
+  java.sql.Clob
+  (marshal-str [x] (slurp (.getCharacterStream x)))
+  java.sql.Blob
+  (marshal-str [x] (marshal-str (.getBytes x 0 (.length x))))
+  Character
+  (marshal-str [x] (str x))
+  Object
+  (marshal-str [x] (pr-str x)) ;NOT using str here
+  nil
+  (marshal-str [_] nil))
+
+(extend (Class/forName "[B") ;byte arrays
+  MarshalStr
+  {:marshal-str (fn [^"[B" x] (String. x "UTF-8"))})
+
+(defprotocol MarshalDouble
+  (marshal-double [x]))
+
+(extend-protocol MarshalDouble
+  Double
+  (marshal-double [x] x)
+  Number
+  (marshal-double [x] (double x))
+  String
+  (marshal-double [x] (Double/valueOf x))
+  Character
+  (marshal-double [x] (marshal-double (Character/getNumericValue x)))
+  nil
+  (marshal-double [_] nil))
+
+(defprotocol MarshalDecimal
+  (marshal-decimal [x]))
+
+(extend-protocol MarshalDecimal
+  BigDecimal
+  (marshal-decimal [x] x)
+  Number
+  (marshal-decimal [x] (bigdec x))
+  String
+  (marshal-decimal [x] (bigdec x))
+  nil
+  (marshal-double [_] nil))
+
+(defprotocol MarshalBoolean
+  (marshal-boolean [x]))
+
+(extend-protocol MarshalBoolean
+  Boolean
+  (marshal-boolean [x] x)
+  Number
+  (marshal-boolean [x] (not (zero? x)))
+  String
+  (marshal-boolean [x] (Boolean/valueOf x))
+  nil
+  (marshal-boolean [_] nil))
+
+(defprotocol MarshalBytes
+  (marshal-bytes [x]))
+
+(extend-protocol MarshalBytes
+  String
+  (marshal-bytes [x] (.getBytes x "UTF-8"))
+  java.sql.Blob
+  (marshal-bytes [x] (.getBytes x 0 (.length x)))
+  nil
+  (marshal-bytes [_] nil))
+
+(extend (Class/forName "[B") ;byte arrays
+  MarshalBytes
+  {:marshal-bytes (fn [x] x)})
+
+(defprotocol MarshalDate
+  (marshal-date [x]))
+
+(def date-sdf (java.text.SimpleDateFormat. "yyyy-MM-dd"))
+
+(defn date->sql-timestamp [^java.util.Date d]
+  (java.sql.Timestamp. (.getTime d)))
+
+(defn date->sql-date [^java.util.Date d]
+  (java.sql.Date (.getTime d)))
+
+(defn date->sql-time [^java.util.Date d]
+  (java.sql.Time. (.getTime d)))
+
+(extend-protocol MarshalDate
+  java.util.Date
+  (marshal-date [x] (date->sql-date x))
+  String
+  (marshal-date [x] (date->sql-date
+                      (.parse ^java.text.SimpleDateFormat date-sdf x)))
+  Number
+  (marshal-date [x] (date->sql-date (java.util.Date. (long x))))
+  DateTime
+  (marshal-date [x] (date->sql-date (.toDate x)))
+  LocalDate
+  (marshal-date [x] (date->sql-date (.toDate x)))
+  nil
+  (marshal-date [_] nil))
+
+(defprotocol MarshalTime
+  (marshal-time [x]))
+
+(def time-sdf (java.text.SimpleDateFormat. "HH:mm:ss"))
+
+(extend-protocol MarshalTime
+  java.util.Date
+  (marshal-time [x] (date->sql-time x))
+  String
+  (marshal-time [x] (date->sql-time (.parse ^java.text.SimpleDateFormat time-sdf x)))
+  Number
+  (marshal-time [x] (date->sql-time (java.util.Date. (long x))))
+  DateTime
+  (marshal-time [x] (date->sql-time (.toDate x)))
+  LocalTime
+  (marshal-time [x] (date->sql-time (.toDate ^DateTime (.toDateTimeToday x))))
+  nil
+  (marshal-time [_] nil))
+
+(defprotocol MarshalDatetime
+  (marshal-datetime [x]))
+
+(extend-protocol MarshalDatetime
+  java.util.Date
+  (marshal-datetime [x] (date->sql-timestamp x))
+  String
+  (marshal-datetime [x] (date->sql-timestamp (instant/read-instant-date x)))
+  Number
+  (marshal-datetime [x] (date->sql-timestamp (java.util.Date. (long x))))
+  DateTime
+  (marshal-datetime [x] (date->sql-timestamp (.toDate x)))
+  LocalDate
+  (marshal-datetime [x] (date->sql-timestamp (.toDate x)))
+  nil
+  (marshal-datetime [_] nil))
+
 
 ;; For data-source-wide marshalling/unmarshalling. Implemented as protocols
 ;; for performance

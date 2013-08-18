@@ -39,21 +39,20 @@
 
 (defmulti marshal-value
   "Parses a value according to the given type, for the purpose of storage
-  in a data source. Same as `parse-value` for built-in types, but could differ
-  for custom types."
+  in a data source."
   (fn [v type] type))
 
 (defmethod marshal-value :default [v type]
   (case type
-    :int (cp/parse-int v)
-    :str (cp/parse-str v)
-    :boolean (cp/parse-boolean v)
-    :datetime (cp/parse-datetime v)
-    :date (cp/parse-date v)
-    :time (cp/parse-time v)
-    :double (cp/parse-double v)
-    :decimal (cp/parse-decimal v)
-    :bytes (cp/parse-bytes v)
+    :int (cp/marshal-int v)
+    :str (cp/marshal-str v)
+    :boolean (cp/marshal-boolean v)
+    :datetime (cp/marshal-datetime v)
+    :date (cp/marshal-date v)
+    :time (cp/marshal-time v)
+    :double (cp/marshal-double v)
+    :decimal (cp/marshal-decimal v)
+    :bytes (cp/marshal-bytes v)
     v))
 
 (def ^:private type-parser-map
@@ -168,15 +167,15 @@
           (let [type (-> fname fields :type)
                 v* (try
                      (case type
-                       :int (cp/parse-int v)
-                       :str (cp/parse-str v)
-                       :boolean (cp/parse-boolean v)
-                       :datetime (cp/parse-datetime v)
-                       :date (cp/parse-date v)
-                       :time (cp/parse-time v)
-                       :double (cp/parse-double v)
-                       :decimal (cp/parse-decimal v)
-                       :bytes (cp/parse-bytes v)
+                       :int (cp/marshal-int v)
+                       :str (cp/marshal-str v)
+                       :boolean (cp/marshal-boolean v)
+                       :datetime (cp/marshal-datetime v)
+                       :date (cp/marshal-date v)
+                       :time (cp/marshal-time v)
+                       :double (cp/marshal-double v)
+                       :decimal (cp/marshal-decimal v)
+                       :bytes (cp/marshal-bytes v)
                        (marshal-value v type))
                      (catch Exception e
                        (throw-info
