@@ -338,16 +338,18 @@
           env (zipmap fnames (map #(cdm/resolve-path dm ent % :lax no-fields?)
                                   fnames))
           quoting (cds/get-quoting ds)
-          table {(hq/quote-identifier (:db-name ent)
-                                      :style quoting)
-                 (hq/quote-identifier ename :style quoting)}
+          table (hq/quote-identifier (:db-name ent) :style quoting)
+          alias (hq/quote-identifier ename :style quoting)
           ;; TODO: joins
-          pred* (when pred
-                  (-> pred
-                    (qualify-pred-fields quoting env)
-                    (hq/format-predicate :quoting quoting)))]
+          [pred* & params] (when pred
+                             (-> pred
+                               (qualify-pred-fields quoting env)
+                               (hq/format-predicate :quoting quoting)))
+          sql (str "DELETE " alias " FROM " table " AS " alias
+                   (when pred* (str " WHERE " pred*)))
+          sql-params (into [sql] params)]
       (first
-        (jd/delete! ds table pred*)))))
+        (jd/execute! ds sql-params)))))
 
 ;;;;
 
