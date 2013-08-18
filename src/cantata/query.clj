@@ -556,18 +556,31 @@
             (peek (first (filter seq quals)))))
       (first (:select q))))
 
+(defn ^:private get-rp-pk [resolved-path default-pk]
+  (if-let [chain (not-empty (:chain resolved-path))]
+    (-> chain peek :to :pk)
+    default-pk))
+
 (defn force-pks
-  "If the PK of entity `ent` is not already present in query map `eq`, and
-  there are to-many rels referred to, add the PK (or multiple PKs) to :select.
-  Returns [q env added-select-pks]."
+  "If the PK of entity `ent` and any selected rels are not already present in
+  query map `eq`, and there are to-many rels referred to, add the PK (or
+  multiple PKs) to :select. Returns [q env added-paths]."
   [ent eq env]
-  ;; TODO: add nested PKs??
   (if (not-any? (comp #(some (comp :reverse :rel) %) :chain)
                 (vals env))
     [eq env] ;don't bother if there are no to-many rels
     (let [npk (dm/normalize-pk (:pk ent))
           select (map #(or (:final-path (env %)) %) (:select eq))
-          add-pks (remove (set select) npk)
+          rpks (mapcat
+                 (fn [rp]
+                   (when-let [rpk (get-rp-pk rp nil)]
+                     (let [path (:final-path rp)
+                           qual (cu/qualifier path)]
+                       (map #(cu/join-path qual %)
+                            (dm/normalize-pk rpk)))))
+                 (keep env (remove agg? select)))
+          all-pks (distinct (concat npk rpks))
+          add-pks (remove (set select) all-pks)
           eq (if (seq add-pks)
                (assoc eq :select (concat select add-pks))
                eq)]
@@ -777,11 +790,6 @@
                              all-path-parts opts rel-pp rel-pk-cols))))
               (build-result-map own-basenames (map (first group) own-idxs) opts)
               next-infos)))))))
-
-(defn ^:private get-rp-pk [resolved-path default-pk]
-  (if-let [chain (not-empty (:chain resolved-path))]
-    (-> chain peek :to :pk)
-    default-pk))
 
 (defn ^:private get-qual-parts-reverses [qual qual-parts env]
   (loop [qual qual

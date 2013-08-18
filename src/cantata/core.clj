@@ -272,10 +272,6 @@
   retrieving all related records, restrict the results using the :where clause,
   or use the `querym` function.
 
-  NOTE 2: if you do not select primary keys for nested related maps, you may
-  see maps with nil values that in actuality are absent SQL rows. To prevent
-  this, select the primary keys or use :with to force an inner join.
-
   Keyword options:
 
         :flat - do not nest results; results for the same primary key may be
@@ -285,10 +281,10 @@
                 vector of column names, and rows is a sequence of vectors with
                 values for each column
       :params - map of bindable param names to values
-    :force-pk - prevent Cantata from implicitly including the entity's
-                primary key in the low-level database query when to-many
-                relationships are selected (which it does to make nesting more
-                predictable and consistent)"
+    :force-pk - prevent Cantata from implicitly adding primary keys to the
+                the low-level database query when to-many relationships are
+                selected (which it does to make nesting more predictable and
+                consistent)"
   [ds q & {:keys [flat vectors force-pk] :as opts}]
   (if (or flat vectors (sql/plain-sql? q))
     (flat-query ds q opts)
