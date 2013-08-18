@@ -282,8 +282,17 @@
           (cons (str qargs1 " LIMIT 1") (rest q)))
         (concat q [:limit 1])))))
 
-(defn ^:private get-return-key [ret]
-  (:generated_key ret ((keyword "scope_identity()") ret))) ;H2 hack
+(defn ^:private get-return-key [ent ret]
+  (when ret
+    (if-let [rk (:generated_key ret ((keyword "scope_identity()") ret))] ;H2 hack
+      rk
+      (let [pkfs (map #(cdm/field ent %) (cdm/normalize-pk (:pk ent)))
+            ;; match clojure.java.jdbc identifier munging
+            pkks (map #(-> % :db-name string/lower-case keyword) pkfs)
+            pkvs (cdm/pk-val ret pkks)]
+        (if (>= 1 (count pkvs))
+          (first pkvs)
+          pkvs)))))
 
 (defn qualify-values-map [m quoting env marshaller]
   (into {} (for [[k v] m]
@@ -305,8 +314,13 @@
         maps* (map #(qualify-values-map % quoting env marshaller) maps)
         table (hq/quote-identifier (:db-name ent)
                                    :style quoting)
-        ret (apply jd/insert! ds table maps*)]
-    (map get-return-key ret)))
+        cols (keys (first maps*))
+        sql (str "INSERT INTO " table " (" (string/join ", " cols) ")"
+                 " VALUES (" (string/join ", " (repeat (count cols) "?")) ")")
+        ret (doall (for [params (map vals maps*)]
+                     (jd/db-do-prepared-return-keys
+                       ds true sql params)))]
+    (map #(get-return-key ent %) ret)))
 
 (defn update!
   [ds dm ename values pred & {:as opts}]
