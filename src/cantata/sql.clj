@@ -345,7 +345,9 @@
                              (-> pred
                                (qualify-pred-fields quoting env)
                                (hq/format-predicate :quoting quoting)))
-          sql (str "DELETE " alias " FROM " table " AS " alias
+          ;; HACK
+          mysql? (= "mysql" (cds/get-subprotocol ds))
+          sql (str "DELETE " (when mysql? alias) " FROM " table " AS " alias
                    (when pred* (str " WHERE " pred*)))
           sql-params (into [sql] params)]
       (first
