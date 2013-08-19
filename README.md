@@ -34,7 +34,9 @@ Most of the API is exposed through the `cantata.core` namespace:
 
 ### Setup
 
-To use Cantata, you need a data source and a data model. Let's assume we have a schema like this:
+To use Cantata, you need a data source and a data model.
+
+Let's assume we have a schema like this already set up in a database:
 
 ![schema](https://github.com/jkk/cantata/raw/master/doc/simplified_schema.png)
 
