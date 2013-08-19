@@ -23,12 +23,16 @@ Leiningen coordinate:
 
 See the [Quick Reference](#quick-reference) for a more systematic breakdown.
 
+### Namespace
+
 Most of the API is exposed through the `cantata.core` namespace:
 
 ```clj
 (ns example.core
   (:require [cantata.core :as c]))
 ```
+
+### Setup
 
 To use Cantata, you need a data source and a data model. Let's assume we have a schema like this:
 
@@ -101,14 +105,16 @@ You can refer to related entities anywhere in a query, and Cantata will work out
           :where [:= "Canada" :renter.country-name]])
 ```
 
-You can have Cantata fetch data from related tables in multiple database round trips if you prefer, using `querym`. With this strategy, primary keys gathered during an initial query will be used to find data from related tables. Both fetching strategies -- single vs. multiple round trips -- have benefits and costs. Cantata lets choose.
+You can have Cantata fetch data from related tables in multiple database round trips if you prefer, using `querym`. With this strategy, primary keys gathered during an initial query will be used to find data from related tables.
 
 ```clj
-;; 3 database round trips - one for each to-many relationship
+;; 3 database round trips - an extra for each to-many relationship
 (c/querym ds [:from :film
               :include [:language :category :actor]
               :limit 10])
 ```
+
+Both fetching strategies -- single vs. multiple round trips -- have benefits and costs. Cantata lets choose.
 
 ### Saving
 
@@ -131,6 +137,26 @@ If the primary key of a record is present, an update will be performed:
 (c/save! film {:film-id 1001 :release-year 1962})
 ```
 
+### Values and Types
+
+Cantata can use field type information (gathered during reflection or defined explicitly) to transform values as they flow into and out of a data source.
+
+For example, maybe you prefer Joda dates to Java ones:
+
+```clj
+(def ds (delay (c/data-source
+                 mysql-spec model
+                 :reflect true
+                 :joda-dates true)))
+
+(c/queryf ds [:select :payment.payment-date :limit 3])
+=> (#<DateTime 2005-06-15T22:02:53.000Z>
+    #<DateTime 2005-06-16T01:08:46.000Z>
+    #<DateTime 2005-06-16T19:18:57.000Z>)
+```
+
+Custom types can be defined by implementing Cantata multimethods and protocols.
+
 ## Playground Project
 
 A playground project, which uses a fully fleshed out version of the movie store schema, with lots of fake data, is available in the __[cantata-sample](https://github.com/jkk/cantata-sample)__ repo.
@@ -138,10 +164,6 @@ A playground project, which uses a fully fleshed out version of the movie store 
 ## Quick Reference
 
 ### Data Model
-
-A data model describes the entities in a system and the relationships between them. A data model exists independently of a data source, but they are bundled for convenience.
-
-Cantata can inspect a data source and generate a data model for you automatically; see the `data-source` function's `:reflect` option. The following describes how to define a data model explicitly. Both methods can be used together, with your explicit definitions taking precedence over the reflected ones.
 
 A data model is created using the `data-source` or `make-data-model` functions, which take entity specs. Cantata transforms the entity specs you provide into a `DataModel` record internally.
 
@@ -211,8 +233,6 @@ Hooks take form of a map from hook name to hook function. Available hooks:
     :before-delete :after-delete
   
 ### Data Source
-
-A data source is where data comes from and gets stored to: a database.
 
 A data source map is created using the `data-source` function. The map it returns will be compatible with both Cantata and clojure.java.jdbc.
 
@@ -486,6 +506,7 @@ query.
 
 ### Accessors
 
+* `data-model [ds]`
 * `entities [ds]`
 * `entity [ds ename]`
 * `rels [ds ename]`
@@ -511,6 +532,13 @@ query.
 (c/with-debug ds
   (c/cascading-delete-ids! film 1))
 ```
+
+### Extending
+
+* `cantata.parse/parse-value [v type]` - multimethod for defining how a value of a certain type gets parsed when it comes out of the database or other source
+* `cantata.parse/marshal-value [v type]` - multimethod for defining how a value of a certain type gets marshalled before being sent to the database
+* `cantata.protocols` - namespace that contains protocols for parsing and marshalling built-in types
+* See the [Extensibility section](https://github.com/jkk/honeysql#extensibility) of the HoneySQL docs for information about adding custom query clauses
 
 ## License
 
