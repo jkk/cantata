@@ -164,7 +164,7 @@ You can use multiple data sources or data models simultaneously, in different co
 
 ## Playground Project
 
-A playground project, which uses a fully fleshed out version of the movie store schema, with lots of fake data, is available in the __[cantata-sample](https://github.com/jkk/cantata-sample)__ repo.
+A playground project, which uses a fully fleshed out version of the movie store schema, with lots of fake data, is available in the __[cantata-sample](https://github.com/jkk/cantata-sample)__ repo. The README has lots of example queries.
 
 ## Quick Reference
 
