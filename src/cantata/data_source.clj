@@ -8,10 +8,15 @@
 
 (set! *warn-on-reflection* true)
 
+(defn ^:private get-url-subprotocol [url]
+  (second (re-find #"^([^:]+):"
+                   (string/replace url #"^jdbc:" ""))))
+
 (defn normalize-db-spec [db-spec]
   (cond
     (map? db-spec) db-spec
-    (string? db-spec) {:connection-uri db-spec}
+    (string? db-spec) {:subprotocol (get-url-subprotocol db-spec)
+                       :connection-uri db-spec}
     (instance? java.net.URI db-spec) (normalize-db-spec (str db-spec))
     :else (throw-info "Unrecognized db-spec format" {:db-spec db-spec})))
 
@@ -28,11 +33,12 @@
 
 (defn get-subprotocol [db-spec]
   (or (:subprotocol db-spec)
+      (when-let [url (:connection-uri db-spec)]
+        (get-url-subprotocol url))
       (let [ds (:datasource db-spec)]
         (when (and ds (instance? ComboPooledDataSource ds))
-          (let [url (.getJdbcUrl ^ComboPooledDataSource ds)]
-            (second (re-find #"^([^:]+):"
-                             (string/replace url #"^jdbc:" ""))))))))
+          (get-url-subprotocol
+            (.getJdbcUrl ^ComboPooledDataSource ds))))))
 
 (defn detect-quoting [db-spec]
   (when-let [subprot (get-subprotocol db-spec)]
