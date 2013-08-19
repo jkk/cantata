@@ -131,6 +131,15 @@
              (next vs))
       map)))
 
+(defn ordered-group-by [f coll]
+  (persistent!
+    (reduce
+      (fn [ret x]
+        (let [k (f x)]
+          (assoc! ret k (conj (get ret k []) x))))
+      (transient (om/ordered-map))
+      coll)))
+
 (defn throw-info [msg data]
   (throw
     (ex-info (if (sequential? msg)

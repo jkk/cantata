@@ -773,7 +773,7 @@
                            info))]
         (into
           []
-          (for [group (vals (group-by key-fn rows))]
+          (for [group (vals (cu/ordered-group-by key-fn rows))]
             (reduce
               (fn [m [rel-pk-cols rel-pp _ rel-pp-rev]]
                 (let [nest-pp (dropv (count path-parts) rel-pp)
