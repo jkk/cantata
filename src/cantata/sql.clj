@@ -8,7 +8,8 @@
             [clojure.java.jdbc :as jd]
             [honeysql.core :as hq]
             [clojure.string :as string])
-  (:import cantata.records.PreparedQuery))
+  (:import cantata.records.PreparedQuery
+           [honeysql.types SqlCall SqlRaw]))
 
 (set! *warn-on-reflection* true)
 
@@ -82,17 +83,19 @@
 (declare qualify-query)
 
 (defmethod qualify-clause :select [_ select quoting env]
-  (for [field select]
-    (let [[field alias] (if (vector? field)
-                          field
-                          [field])
+  (for [path select]
+    (let [[field alias] (if (vector? path)
+                          path
+                          [path])
           qfield (if (map? field)
                    (qualify-query field quoting env)
                    (qualify (env field field) quoting))]
       (if (or (= :* field) (cq/wildcard? field))
         qfield
-        [qfield (or alias (identifier (or (:final-path (env field)) field)
-                                      quoting))]))))
+        (if (or (instance? SqlRaw field) (instance? SqlCall field))
+          path
+          [qfield (or alias (identifier (or (:final-path (env field)) field)
+                                        quoting))])))))
 
 (defn qualify-pred-fields [pred quoting env]
   (when pred

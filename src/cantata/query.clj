@@ -11,7 +11,8 @@
             [cantata.records :as r]
             [cantata.reflect :as reflect]
             [clojure.string :as string]
-            [flatland.ordered.map :as om]))
+            [flatland.ordered.map :as om])
+  (:import [honeysql.types SqlCall SqlRaw]))
 
 (set! *warn-on-reflection* true)
 
@@ -300,8 +301,8 @@
               (identical? :* field) (or (seq (dm/field-names ent))
                                         [(cu/join-path (:name ent) :*)])
               (wildcard? field) (expand-wildcard dm ent env field)
-              (= :entity (-> env field :resolved :type)) (expand-wildcard
-                                                           dm ent env (cu/join-path field :*))
+              (= :entity (-> (env field) :resolved :type)) (expand-wildcard
+                                                             dm ent env (cu/join-path field :*))
               :else [field]))
           fields))
 
@@ -518,7 +519,8 @@
       (apply dm/resolve-path dm ent path opts))))
 
 (defn ^:private resolve-and-add-path [dm ent env path & opts]
-  (if (or (env path) (wildcard? path) (identical? :* path))
+  (if (or (env path) (wildcard? path) (identical? :* path)
+          (instance? SqlRaw path) (instance? SqlCall path) (vector? path))
     env
     (if-let [rp (apply resolve-path dm ent env path opts)]
       (let [env (assoc env path rp)
