@@ -23,7 +23,7 @@ To use Cantata, first you need a data source and a data model. Let's assume we h
 
 ![schema](https://github.com/jkk/cantata/raw/master/doc/simplified_schema.png)
 
-To get up and running quickly, you can let Cantata work out most of the data model for you using reflection:
+To get up and running quickly, you can let Cantata work out most of the data model itself using reflection:
 
 ```clj
 (ns example.core
@@ -32,7 +32,7 @@ To get up and running quickly, you can let Cantata work out most of the data mod
 ;; Any clojure.java.jdbc compatible DB spec
 (def mysql-spec "jdbc:mysql://localhost/film_store")
 
-;; Shortcuts to supplements the reflected model
+;; Shortcuts to supplement the reflected model
 (def model
   {:film {:shortcuts {:actor :film-actor.actor
                       :category :film-category.category
@@ -43,11 +43,29 @@ To get up and running quickly, you can let Cantata work out most of the data mod
                  mysql-spec model
                  :reflect true)))
 ```
-Note that Cantata does not create database tables or do migrations. We're merely describing a schema that has been created elsewhere.
+Note that Cantata does not create database tables or do migrations. We're merely glomming onto a schema that has been created elsewhere.
 
 ### Querying
 
-Queries are made of data:
+Cantata leverages the data model to perform queries that fetch and combine data from any number of related tables. The following query fetches the film with id 1, plus related language, category, and actor data -- all in one database round trip, and nested nicely:
+
+```clj
+(c/query ds [:from :film
+             :select [:id :title :release-year]
+             :include [:language :category :actor]
+             :where [:= 1 :id]])
+
+=> [{:id 1
+     :title "ACADEMY DINOSAUR"
+     :release-year 2006
+     :language {:name "English", :id 1}
+     :category [{:name "Documentary", :id 6}]
+     :actor [{:name "PENELOPE GUINESS", :id 1}
+             {:name "CHRISTIAN GABLE", :id 10}
+             {:name "LUCILLE TRACY", :id 20}]}]
+```
+
+Queries are made entirely of simple data, and can be easily amended on the fly:
 
 ```clj
 (def kid-film {:from :film
@@ -56,26 +74,10 @@ Queries are made of data:
                        [:< 90 :length 100]]})
 
 (c/query ds [kid-film :select [:title :release-year] :limit 3])
+
 => [{:title "ARMAGEDDON LOST" :release-year 2006}
     {:title "BILL OTHERS" :release-year 2006}
     {:title "BOUND CHEAPER" :release-year 2006}]
-```
-
-Cantata leverages your data model to enable queries that fetch and combine data from any number of related tables. The following query fetches the film with id 1, plus related language, category, and actor data -- all in one database round trip, and nested nicely:
-
-```clj
-(c/query ds [:from :film
-             :select [:id :title :release-year]
-             :include [:language :category :actor]
-             :where [:= 1 :id]])
-=> [:id 1
-    :title "ACADEMY DINOSAUR"
-    :release-year 2006
-    :language {:name "English", :id 1}
-    :category [{:name "Documentary", :id 6}]
-    {:actor [{:name "PENELOPE GUINESS", :id 1}
-             {:name "CHRISTIAN GABLE", :id 10}
-             {:name "LUCILLE TRACY", :id 20}]}]
 ```
 
 You can refer to related entities anywhere in a query, and Cantata will work out the joins for you:
@@ -88,7 +90,7 @@ You can refer to related entities anywhere in a query, and Cantata will work out
           :where [:= "Canada" :renter.country-name]])
 ```
 
-You can have Cantata fetch data from related tables in multiple database round trips if you prefer, using `querym`. With this method, primary keys gathered during an initial query will be used to find data from related tables. Both fetching strategies -- single vs multiple round trips -- have trade-offs. Cantata lets choose.
+You can have Cantata fetch data from related tables in multiple database round trips if you prefer, using `querym`. With this strategy, primary keys gathered during an initial query will be used to find data from related tables. Both fetching strategies -- single vs. multiple round trips -- have benefits and costs. Cantata lets choose.
 
 ```clj
 ;; 3 database round trips - one for each to-many relationship
@@ -117,7 +119,7 @@ You can have Cantata fetch data from related tables in multiple database round t
 
 ## Playground Project
 
-A sample playground project, which uses a fleshed out version of the movie store schema, is available in the [cantata-sample](https://github.com/jkk/cantata-sample) repo.
+A playground project, which uses a fleshed out version of the movie store schema, is available in the __[cantata-sample](https://github.com/jkk/cantata-sample)__ repo.
 
 ## Quick Reference
 
