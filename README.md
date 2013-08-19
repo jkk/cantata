@@ -1,6 +1,6 @@
-<img src="https://upload.wikimedia.org/wikipedia/commons/thumb/f/f0/Bwv105-wie-zittern.png/307px-Bwv105-wie-zittern.png" align=right>
+<img src="https://upload.wikimedia.org/wikipedia/commons/6/6a/Johann_Sebastian_Bach.jpg" align=right width=250>
 
-# Cantata
+### Cantata
 
 Melodic SQL for Clojure. Highlights:
 
@@ -8,6 +8,8 @@ Melodic SQL for Clojure. Highlights:
 * Relationship-aware querying and saving
 * Legacy-friendly: custom name mappings, composite primary keys
 * Extensibile
+
+<br>
 
 ## Installation
 
