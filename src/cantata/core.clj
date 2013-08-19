@@ -92,7 +92,7 @@
             db-spec - a clojure.java.jdbc-compatible spec
        entity-specs - optional DataModel record or entity specs; when provided,
                       entity-specs will transformed into a DataModel; see
-                     `make-data-model` for format; will be merged with and
+                      `make-data-model` for format; will be merged with and
                       take precedence over reflected entity specs
 
   Keyword options (all default to false unless otherwise noted):
