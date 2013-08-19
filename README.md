@@ -39,15 +39,18 @@ To get up and running quickly, you can let Cantata work out most of the data mod
                       :renter :inventory.rental.customer}}
    :customer {:shortcuts {:country-name :address.city.country.country}}})
 
+;; Wrapped in a delay to defer reflection till runtime
 (def ds (delay (c/data-source
                  mysql-spec model
                  :reflect true)))
 ```
-Note that Cantata does not create database tables or do migrations. We're merely glomming onto a schema that has been created elsewhere.
+Note that Cantata does not create database tables or do migrations. We're merely wiring into a schema that has been created elsewhere.
 
 ### Querying
 
-Cantata leverages the data model to perform queries that fetch and combine data from any number of related tables. The following query fetches the film with id 1, plus related language, category, and actor data -- all in one database round trip, and nested nicely:
+Cantata leverages the data model to perform queries that can fetch and combine data from any number of related tables.
+
+The following query fetches the film with id 1, plus related language, category, and actor data -- all in one database round trip, and nested nicely:
 
 ```clj
 (c/query ds [:from :film
@@ -448,26 +451,53 @@ query.
 
 ### Manipulation Functions
 
-* __`save!`__ `[ds ename values & opts]`
-* __`insert!`__ `[ds ename map-or-maps & opts]`
-* __`update!`__ `[ds ename values pred & opts]`
-* __`delete!`__ `[ds ename pred]`
-* __`delete-ids!`__ `[ds ename id-or-ids]`
-* __`cascading-delete!`__ `[ds ename]`
-* __`cascading-delete-ids!`__ `[ds ename id-or-ids]`
-* __`execute!`__ `[ds q]`
+* `save! [ds ename values & opts]`
+* `insert! [ds ename map-or-maps & opts]`
+* `update! [ds ename values pred & opts]`
+* `delete! [ds ename pred]`
+* `delete-ids! [ds ename id-or-ids]`
+* `cascading-delete! [ds ename]`
+* `cascading-delete-ids! [ds ename id-or-ids]`
+* `merge-and-delete! [ds ename id-to-keep id-to-merge]`
+* `execute! [ds q]`
+
+### Transactions
+
+* `with-transaction [binding & body]`
+* `rollback! [ds]`
+* `unset-rollback! [ds]`
+* `rollback? [ds]`
+* `with-rollback [binding & body]`
+
+### Utility Functions
+
+* `parse [ds ename values]`
+* `validate! [ds ename values]`
+* `problem [keys-or-msg] [keys msg]`
+* `resolve-path [ds ename path]`
+
+### Accessors
+
+* `entities [ds]`
+* `entity [ds ename]`
+* `rels [ds ename]`
+* `rel [ds ename rname]`
+* `fields [ds ename]`
+* `field [ds ename fname]`
+* `field-names [ds ename]`
 
 ### Debugging
 
-```clj
-;; Prints all SQL queries
-(c/verbose
-  (c/querym [:from :film :select [:id :actor]]))
-  
-;; Prints SQL, rolls back changes
-(c/with-debug ds
-  (c/cascading-delete-ids! film 1))
-```
+* `verbose [& body]`
+  ```clj
+  ;; Prints all SQL queries
+  (c/verbose
+    (c/querym [:from :film :select [:id :actor]]))
+* `with-debug [binding & body]`
+  ;; Prints SQL, rolls back changes
+  (c/with-debug ds
+    (c/cascading-delete-ids! film 1))
+  ```
 
 ## License
 
