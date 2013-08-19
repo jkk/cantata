@@ -11,7 +11,8 @@
             [cantata.records :as r]
             [cantata.reflect :as reflect]
             [clojure.string :as string]
-            [flatland.ordered.map :as om])
+            [flatland.ordered.map :as om]
+            [honeysql.core])
   (:import [honeysql.types SqlCall SqlRaw]))
 
 (set! *warn-on-reflection* true)
