@@ -4,9 +4,10 @@
 
 Melodic SQL for Clojure. Highlights:
 
-* Pure-data queries
 * Relationship-aware querying and saving
 * Legacy-friendly: custom name mappings, composite primary keys
+* Pure-data queries
+* No implicit global state
 * Extensibile
 
 <br>
@@ -158,6 +159,8 @@ For example, maybe you prefer Joda dates to Java ones:
 ```
 
 Custom types can be defined by implementing Cantata multimethods and protocols.
+
+You can use multiple data sources or data models simultaneously, in different configurations. They will not step on each other because Cantata has no global state.
 
 ## Playground Project
 
