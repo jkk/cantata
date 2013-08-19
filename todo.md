@@ -1,0 +1,50 @@
+- tests - use cantata-sample code
+- check that recursive rels are possible
+- subqueries; complex examples:
+	- http://www.reddit.com/r/Python/comments/olech/is_django_considered_pythonic_now/c3ijtk9
+	- https://bitbucket.org/sqlalchemy/sqlalchemy/src/be354023de1c34d97b12ba3af316df7ac5761908/test/orm/_fixtures.py
+	- https://gist.github.com/3783529
+- subquery in :from? https://gist.github.com/3984333
+- export/import :bytes data
+	- can use staff picture from original sakila data to test
+- allow ad-hoc entities in join, include, etc
+	- must add them to qenv
+- custom :on rel clause
+- java logging
+	- trace logging
+- ::query-cache ds key?
+- inner join when implicit joins in :where
+- per ds/dm hooks - after-query, before-save
+- rel reversal fn
+- derived fields - fn of one or more other paths
+- have expand-query return all final paths, so it matches query results?
+- move hooks into data source?
+- use lazymap for data-source map
+- use instaparse to parse sql strings?
+- auto-add two-hop reverse rels? e.g., film -> actor
+- lein-cantata plugin; auto gen schema from db
+- batched query; leverage limit/offset
+- field aliasing? doc support or lack thereof
+- :readonly entity key?
+- traverse into SqlCalls to qualify fields
+	- how to distinguish fields from other args for special fns?
+- fn handlers (some are engine specific)
+	- "interval 30 day" etc
+	- cast
+	- datediff
+	- datepart
+	- convert
+- cross-source joins
+- allow exports with cyclic deps
+	- issue warning, then choose arbitrary ordering?
+- support joins in delete and update
+- exception for [< :foo :bar] - i.e., using < instead of :<
+- verily validations?
+- handle certain DB data types better
+	- mysql set/enum, psql enum -- can't represent as keywords; special enum wrapper type?
+- data source protocols? pure clojure data source??
+- :deferred field attr, for blobs and such - i.e., exclude from :*
+- prepared statements??
+- source/schema-level options
+	- no implicit joins 
+- be a bit smarter about using save! vs update/insert! when saving rels
