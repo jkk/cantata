@@ -105,7 +105,7 @@ You can have Cantata fetch data from related tables in multiple database round t
               :limit 10])
 ```
 
-### Saving & Deleting
+### Saving
 
 Cantata can also leverage the data model when saving. Here we add a new film with relevant categories attached:
 
