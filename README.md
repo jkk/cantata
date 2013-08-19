@@ -19,14 +19,14 @@ Leiningen coordinate:
 
 See the [Quick Reference](#quick-reference) for a more systematic breakdown.
 
-The majority of the API is available in the `cantata.core` namespace:
+Most of the API is exposed through the `cantata.core` namespace:
 
 ```clj
 (ns example.core
   (:require [cantata.core :as c]))
 ```
 
-To use Cantata, first you need a data source and a data model. Let's assume we have a schema like this:
+To use Cantata, you need a data source and a data model. Let's assume we have a schema like this:
 
 ![schema](https://github.com/jkk/cantata/raw/master/doc/simplified_schema.png)
 
@@ -43,11 +43,12 @@ To get up and running quickly, you can let Cantata work out most of the data mod
                       :renter :inventory.rental.customer}}
    :customer {:shortcuts {:country-name :address.city.country.country}}})
 
+;; When wrapped in a delay, reflection will happen at runtime
 (def ds (delay (c/data-source
                  mysql-spec model
                  :reflect true)))
 ```
-Note that Cantata does not create database tables or do migrations. We're merely hooking up to a schema that has been created elsewhere.
+Note that Cantata does not create database tables or do migrations. We're merely hooking into a schema that has been created elsewhere.
 
 ### Querying
 
