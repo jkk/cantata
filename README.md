@@ -108,7 +108,7 @@ You can refer to related entities or fields anywhere in a query, and Cantata wil
           :where [:= "Canada" :renter.country-name]])
 ```
 
-You can have Cantata fetch data from related tables in multiple database round trips if you prefer, using `querym`. With this strategy, primary keys gathered during an initial query will be used to find data from related tables.
+You can tell Cantata to fetch data from related tables in multiple database round trips if you prefer, using `querym`. With `querym`, primary keys gathered during an initial query will be used to find data from related tables.
 
 ```clj
 ;; 3 database round trips - an extra for each to-many relationship
@@ -117,7 +117,7 @@ You can have Cantata fetch data from related tables in multiple database round t
               :limit 10])
 ```
 
-Both fetching strategies -- single vs. multiple round trips -- have benefits and costs. Cantata lets choose.
+Both fetching strategies -- single vs. multiple round trips -- have benefits and costs. Cantata lets you choose.
 
 ### Saving
 
@@ -137,7 +137,7 @@ If the primary key of a record is present, an update will be performed:
 
 ```clj
 ;; Update a film - affects only the fields provided
-(c/save! film {:film-id 1001 :release-year 1962})
+(c/save! film {:id 1001 :release-year 1962})
 ```
 
 ### Values and Types
