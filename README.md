@@ -528,7 +528,7 @@ Prints all SQL queries
 
 ```clj
 (c/verbose
-  (c/querym [:from :film :select [:id :actor]]))
+  (c/querym ds [:from :film :select [:id :actor]]))
 ```
 
 #### `with-debug [binding & body]`
