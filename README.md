@@ -488,16 +488,21 @@ query.
 
 ### Debugging
 
-* `verbose [& body]`
-  ```clj
-  ;; Prints all SQL queries
-  (c/verbose
-    (c/querym [:from :film :select [:id :actor]]))
-* `with-debug [binding & body]`
-  ;; Prints SQL, rolls back changes
-  (c/with-debug ds
-    (c/cascading-delete-ids! film 1))
-  ```
+#### `verbose [& body]`
+
+```clj
+;; Prints all SQL queries
+(c/verbose
+  (c/querym [:from :film :select [:id :actor]]))
+```
+
+#### `with-debug [binding & body]`
+
+```clj
+;; Prints SQL, rolls back changes
+(c/with-debug ds
+  (c/cascading-delete-ids! film 1))
+```
 
 ## License
 
