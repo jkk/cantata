@@ -51,7 +51,7 @@ Note that Cantata does not create database tables or do migrations. We're merely
 
 ### Querying
 
-Cantata leverages the data model to perform queries that can fetch and combine data from any number of related tables.
+Cantata can leverage the data model to perform queries that fetch and combine data from any number of related tables.
 
 The following query fetches the film with id 1, plus related language, category, and actor data -- all in one database round trip, and nested nicely:
 
