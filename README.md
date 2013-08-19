@@ -1,3 +1,5 @@
+<img src="https://upload.wikimedia.org/wikipedia/commons/thumb/f/f0/Bwv105-wie-zittern.png/307px-Bwv105-wie-zittern.png" align=right>
+
 # Cantata
 
 Melodic SQL for Clojure. Highlights:
