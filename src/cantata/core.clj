@@ -512,6 +512,11 @@
   entities entity rels rel fields field field-names shortcut shortcuts
   validate! resolve-path)
 
+(defn data-model
+  "Return the DataModel record bundled within a data source"
+  [ds]
+  (cds/get-data-model ds))
+
 (defn parse
   "Parses a map or sequence of field names and corresponding values into an
   entity values map, using field types to guide parsing. Takes data source
