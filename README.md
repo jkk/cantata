@@ -524,18 +524,20 @@ query.
 
 #### `verbose [& body]`
 
+Prints all SQL queries
+
 ```clj
-;; Prints all SQL queries
 (c/verbose
   (c/querym [:from :film :select [:id :actor]]))
 ```
 
 #### `with-debug [binding & body]`
 
+Prints all SQL, rolls back changes
+
 ```clj
-;; Prints SQL, rolls back changes
 (c/with-debug ds
-  (c/cascading-delete-ids! film 1))
+  (c/cascading-delete-ids! ds :film 1))
 ```
 
 ### Extending
@@ -546,7 +548,6 @@ query.
 * See the [Extensibility section](https://github.com/jkk/honeysql#extensibility) of the HoneySQL docs for information about adding custom query clauses
 
 ## License
-
 
 Copyright © 2013 Justin Kramer
 
