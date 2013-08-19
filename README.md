@@ -101,25 +101,28 @@ You can have Cantata fetch data from related tables in multiple database round t
 
 ### Saving & Deleting
 
+Cantata can also leverage the data model when saving. Here we add a new film with relevant categories attached:
+
 ```clj
-;; Add a new film - returns the generated id. Executed within a transaction.
+;; Returns the generated id
 (c/save! film {:title "Lawrence of Arabia"
                :language-id 1
                :category [{:id 7}            ;Drama
                           {:id 4}            ;Classics
                           {:name "Epic"}]})  ;Doesn't exist - will be created
+```
+Saving the film record and all related records happens within a transaction.
 
+If the primary key of a record is present, an update will be performed:
+
+```clj
 ;; Update a film - affects only the fields provided
 (c/save! film {:film-id 1001 :release-year 1962})
-
-;; Delete a film
-(c/delete-ids! film 1)
-
 ```
 
 ## Playground Project
 
-A playground project, which uses a fleshed out version of the movie store schema, is available in the __[cantata-sample](https://github.com/jkk/cantata-sample)__ repo.
+A playground project, which uses a fully fleshed out version of the movie store schema, with lots of fake data, is available in the __[cantata-sample](https://github.com/jkk/cantata-sample)__ repo.
 
 ## Quick Reference
 
