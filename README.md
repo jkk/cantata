@@ -63,9 +63,9 @@ Note that Cantata does not create database tables or do migrations. We're merely
 
 ### Querying
 
-Cantata can leverage the data model to perform queries that fetch and combine data from any number of related tables.
+Cantata can leverage the data model to perform queries that fetch and combine results from any number of related tables.
 
-The following query fetches the film with id 1, plus related language, category, and actor data -- all in one database round trip, and nested nicely:
+The following query fetches the film with id 1, plus related language, category, and actor data -- all in one database round trip, and nicely nested:
 
 ```clj
 (c/query ds [:from :film
@@ -83,7 +83,7 @@ The following query fetches the film with id 1, plus related language, category,
              {:name "LUCILLE TRACY", :id 20}]}]
 ```
 
-Queries are made entirely of simple data, and can be easily amended on the fly:
+Queries are made of simple data, and can be amended on the fly:
 
 ```clj
 (def kid-film {:from :film
@@ -98,7 +98,7 @@ Queries are made entirely of simple data, and can be easily amended on the fly:
     {:title "BOUND CHEAPER" :release-year 2006}]
 ```
 
-You can refer to related entities anywhere in a query, and Cantata will work out the joins for you:
+You can refer to related entities or fields anywhere in a query, and Cantata will work out the joins for you:
 
 ```clj
 ;; 8 joins against 9 tables - one round trip
