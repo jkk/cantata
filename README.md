@@ -168,6 +168,8 @@ A playground project, which uses a fully fleshed out version of the movie store 
 
 ## Quick Reference
 
+All functions come from the `cantata.core` namespace unless otherwise noted.
+
 ### Data Model
 
 A data model is created using the `data-source` or `make-data-model` functions, which take entity specs. Cantata transforms the entity specs you provide into a `DataModel` record internally.
