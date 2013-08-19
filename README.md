@@ -19,6 +19,13 @@ Leiningen coordinate:
 
 See the [Quick Reference](#quick-reference) for a more systematic breakdown.
 
+The majority of the API is available in the `cantata.core` namespace:
+
+```clj
+(ns example.core
+  (:require [cantata.core :as c]))
+```
+
 To use Cantata, first you need a data source and a data model. Let's assume we have a schema like this:
 
 ![schema](https://github.com/jkk/cantata/raw/master/doc/simplified_schema.png)
@@ -26,9 +33,6 @@ To use Cantata, first you need a data source and a data model. Let's assume we h
 To get up and running quickly, you can let Cantata work out most of the data model itself using reflection:
 
 ```clj
-(ns example.core
-  (:require [cantata.core :as c]))
-
 ;; Any clojure.java.jdbc compatible DB spec
 (def mysql-spec "jdbc:mysql://localhost/film_store")
 
@@ -39,12 +43,11 @@ To get up and running quickly, you can let Cantata work out most of the data mod
                       :renter :inventory.rental.customer}}
    :customer {:shortcuts {:country-name :address.city.country.country}}})
 
-;; Wrapped in a delay to defer reflection till runtime
 (def ds (delay (c/data-source
                  mysql-spec model
                  :reflect true)))
 ```
-Note that Cantata does not create database tables or do migrations. We're merely wiring into a schema that has been created elsewhere.
+Note that Cantata does not create database tables or do migrations. We're merely hooking up to a schema that has been created elsewhere.
 
 ### Querying
 
