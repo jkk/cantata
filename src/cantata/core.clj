@@ -680,11 +680,14 @@
 (defn ^:private save-m [ds ent m & opts]
   (let [pk (:pk ent)
         id (cdm/pk-val m pk)
-        ename (:name ent)]
+        ename (:name ent)
+        optsm (apply hash-map opts)]
     (if (nil? id)
       (apply insert! ds ename m opts)
       (do
-        (if (first (flat-query ds [:from ename :select pk :where [:= pk id]]))
+        (if (or (false? (:check-update optsm))
+                (first (flat-query
+                         ds [:from ename :select pk :where [:= pk id]])))
           (apply update! ds ename m [:= pk id] opts)
           (apply insert! ds ename m opts))
         id))))
@@ -811,8 +814,9 @@
   Returns the primary key of the updated or inserted record.
 
   Accepts the following keyword options:
-      :validate  - when false, does not validate saved records
-      :save-rels - when false, does not save related records"
+      :validate     - when false, does not validate saved records
+      :check-update - when false, assumes presence of PK = update
+      :save-rels    - when false, does not save related records"
   [ds ename values & {:keys [validate save-rels] :as opts}]
   (let [dm (cds/get-data-model ds)
         ent (cdm/entity dm ename)
