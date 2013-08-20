@@ -7,4 +7,8 @@
                  [honeysql "0.4.2"]
                  [org.clojure/java.jdbc "0.3.0-alpha4"]
                  [c3p0/c3p0 "0.9.1.2"]
-                 [joda-time "2.2"]])
+                 [joda-time "2.2"]]
+  :profiles {:dev {:resource-paths ["dev-resources"]
+                   :dependencies [[mysql/mysql-connector-java "5.1.26"]
+                                  [org.postgresql/postgresql "9.2-1003-jdbc4"]
+                                  [com.h2database/h2 "1.3.173"]]}})
