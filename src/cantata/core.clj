@@ -300,8 +300,10 @@
   (let [optsm (apply hash-map opts)
         ret (apply query ds q opts)]
     (if (:vectors optsm)
-      (with-meta (first (second ret)) (meta (first ret)))
-      (with-meta (first ret) (meta ret)))))
+      (when-let [ret1 (first (second ret))]
+        (with-meta ret1 (meta (first ret))))
+      (when-let [ret1 (first ret)]
+        (with-meta ret1 (meta ret))))))
 
 (defn query-count
   "Returns the number of matching results for query `q`. By default, returns
