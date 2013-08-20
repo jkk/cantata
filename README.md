@@ -372,6 +372,11 @@ Keyword options:
 
 ### Other Query Functions
 
+#### `query1 [ds q & opts]`
+
+Like `query` but returns only the first result. Does not limit the query
+in any way, so it's the responsbility of the caller to not query for more
+results than needed.
 
 #### `querym [ds q & opts]`
   

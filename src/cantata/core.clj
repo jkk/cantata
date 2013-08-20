@@ -292,6 +292,17 @@
       (fn [cols rows]
         (nest cols rows :ds-opts (cds/get-options ds))))))
 
+(defn query1
+  "Like `query` but returns the first result. Does not limit the query
+  in any way, so it's the responsbility of the caller to not query for more
+  results than needed."
+  [ds q & opts]
+  (let [optsm (apply hash-map opts)
+        ret (apply query ds q opts)]
+    (if (:vectors optsm)
+      (with-meta (first (second ret)) (meta (first ret)))
+      (with-meta (first ret) (meta ret)))))
+
 (defn query-count
   "Returns the number of matching results for query `q`. By default, returns
   the count of distinct top-level entity results. Set the :flat option to true
