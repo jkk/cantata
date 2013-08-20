@@ -320,10 +320,15 @@
         cols (keys (first maps*))
         sql (str "INSERT INTO " table " (" (string/join ", " cols) ")"
                  " VALUES (" (string/join ", " (repeat (count cols) "?")) ")")
-        ret (doall (for [params (map vals maps*)]
-                     (jd/db-do-prepared-return-keys
-                       ds true sql params)))]
-    (map #(get-return-key ent %) ret)))
+        param-groups (map vals maps*)
+        ret-keys? (not (false? (:return-keys opts)))
+        ret (if ret-keys?
+              (doall (for [param-group (map vals maps*)]
+                       (jd/db-do-prepared-return-keys
+                         ds true sql param-group)))
+              (apply jd/db-do-prepared ds true sql param-groups))]
+    (when ret-keys?
+      (map #(get-return-key ent %) ret))))
 
 (defn update!
   [ds dm ename values pred & {:as opts}]

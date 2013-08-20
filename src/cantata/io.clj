@@ -54,7 +54,7 @@
   [ds in & {:keys [update batch-size] :or {batch-size 100}}]
   (let [save-fn (if update
                   (fn [ent ms] (doseq [m ms] (c/save! ds (:name ent) m)))
-                  (fn [ent ms] (c/insert! ds (:name ent) ms)))
+                  (fn [ent ms] (c/insert! ds (:name ent) ms :return-keys false)))
         dm (cds/get-data-model ds)]
     (with-open [r (io/reader in)]
       (loop [lines (line-seq r)]

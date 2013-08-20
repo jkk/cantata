@@ -572,16 +572,22 @@
   "Inserts an entity map or maps into the data source. Unlike `save!`, the
   maps may not include related entity maps.
 
-  Set :validate to false to prevent validation.
+  By default, returns the primary key(s) of the inserted maps.
 
-  Returns the primary key(s) of the inserted maps."
-  [ds ename m-or-ms & {:keys [validate]}]
+  Multiple maps will be inserted in a transaction.
+
+  Options:
+
+    :validate    - false to prevent validation.
+    :return-keys - false for more efficient insertion of multiple records
+                   (using batches) but without returning generated keys"
+  [ds ename m-or-ms & {:keys [validate return-keys]}]
   (let [ms (cu/seqify m-or-ms)
         dm (cds/get-data-model ds)
         ent (cdm/entity dm ename)
         ms* (map #(prep-map ent % validate) ms)]
     (cdm/invoke-hook ent :before-insert ms*)
-    (let [ret-keys (sql/insert! (force ds) dm ename ms*)
+    (let [ret-keys (sql/insert! (force ds) dm ename ms* :return-keys return-keys)
           ret (if (sequential? m-or-ms)
                 ret-keys
                 (first ret-keys))]
