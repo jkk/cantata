@@ -119,6 +119,8 @@ You can tell Cantata to fetch data from related tables in multiple database roun
 
 Both fetching strategies -- single vs. multiple round trips -- have benefits and costs. Cantata lets you choose.
 
+You can also perform explicit joins if you wish.
+
 ### Saving
 
 Cantata can also leverage the data model when saving. Here we add a new film with relevant categories attached:
@@ -160,7 +162,9 @@ For example, maybe you prefer Joda dates to Java ones:
 
 Custom types can be defined by implementing Cantata multimethods and protocols.
 
-You can use multiple data sources or data models simultaneously, in different configurations. They will not step on each other because Cantata has no global state.
+### State
+
+You can use multiple data sources or data models simultaneously, in different configurations. They will not step on each other because Cantata has no global state. Any state Cantata does have is confined to the data source (database connection, pool, etc.). Data models are immutable.
 
 ## Playground Project
 

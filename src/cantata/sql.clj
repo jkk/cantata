@@ -95,7 +95,8 @@
                    (qualify (env field field) quoting))]
       (if (or (= :* field) (cq/wildcard? field))
         qfield
-        (if (or (instance? SqlRaw field) (instance? SqlCall field))
+        (if (or (instance? SqlRaw field) (instance? SqlCall field)
+                (number? field) (string? field))
           path
           [qfield (or alias (identifier (or (:final-path (env field)) field)
                                         quoting))])))))

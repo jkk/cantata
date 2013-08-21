@@ -575,7 +575,8 @@
 
 (defn ^:private resolve-and-add-path [dm ent env path & opts]
   (if (or (env-get env path 0) (wildcard? path) (identical? :* path)
-          (instance? SqlRaw path) (instance? SqlCall path) (vector? path))
+          (instance? SqlRaw path) (instance? SqlCall path)
+          (number? path) (string? path))
     env
     (if-let [rp (apply resolve-path dm ent env path opts)]
       (let [env (env-assoc env path rp)
