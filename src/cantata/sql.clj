@@ -42,7 +42,7 @@
         chain (:chain x)]
     (if (seq chain)
       (identifier (-> chain peek :to-path) fname quoting)
-      (identifier (-> x :root :db-name) fname quoting))))
+      (identifier (-> x :root :name) fname quoting))))
 
 (defmethod qualify :joined-field [x quoting]
   (let [fname (-> x :resolved :value :db-name)]
@@ -61,7 +61,7 @@
                                                      :style quoting :split false)
                                 ".*"))
                    (identifier (-> chain peek :to-path) fname quoting))
-                 (identifier (-> x :root :db-name) fname quoting))))))
+                 (identifier (-> x :root :name) fname quoting))))))
 
 (defmethod qualify :param [x quoting]
   (-> x :resolved :value))
