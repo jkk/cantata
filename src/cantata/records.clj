@@ -1,7 +1,7 @@
 (ns cantata.records)
 
 (defrecord Field [name type db-name db-type])
-(defrecord Rel [name ename key other-key reverse])
+(defrecord Rel [name ename key other-key reverse one])
 (defrecord Shortcut [name path])
 (defrecord Entity [name pk fields rels db-name db-schema shortcuts hooks])
 (defrecord ValidationProblem [keys msg])

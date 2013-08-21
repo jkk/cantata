@@ -884,7 +884,7 @@
       (into [] (reverse revs))
       (recur
         (first (cu/unqualify qual))
-        (conj revs (some (comp :reverse :rel) (-> qual env :chain)))))))
+        (conj revs (some (comp not :one :rel) (-> qual env :chain)))))))
 
 (defn ^:private get-col-info [from-pk env col]
   (let [rp (env col)

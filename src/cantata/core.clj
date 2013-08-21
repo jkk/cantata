@@ -66,6 +66,8 @@
                  key of related entity
       :reverse - boolean indicating whether the foreign key is on this or
                  the other table
+          :one - boolean indicating whether the relationship is one-to-one;
+                 default: false for reverse rels, true otherwise
 
   Reverse relationships will be automatically added to related entities
   referenced in rel specs, using the name of the former entity as the rel name.

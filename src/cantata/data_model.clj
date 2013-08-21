@@ -47,7 +47,8 @@
                                                  (assoc m :other-key (if reverse?
                                                                        (reflect/guess-rel-key this-name)
                                                                        (:pk (get other-ents (:ename m))))))
-                (nil? reverse?) (assoc :reverse false))))))
+                (nil? reverse?) (assoc :reverse false)
+                (nil? (:one m)) (assoc :one (not reverse?)))))))
 
 (defn make-shortcut
   "Transform a shortcut spec - a map or [path target-path] vector - into
