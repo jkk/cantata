@@ -15,7 +15,7 @@
 
 (def mysql-spec
   {:subprotocol "mysql"
-   :subname "//127.0.0.1/film_store"
+   :subname "//127.0.0.1/film_store?yearIsDateType=false"
    :user "film_store"
    :password "film_store"})
 
@@ -89,18 +89,21 @@
     (doseq [db-spec [h2-spec mysql-spec psql-spec]]
       (let [subprot (cds/get-subprotocol db-spec)]
         (println subprot "- Setting up DB")
-        (setup-db! h2-spec)
+        (setup-db! db-spec)
         (println subprot "- Reflecting data model")
         (with-redefs [ds (c/data-source
-                           h2-spec model
+                           db-spec model
                            :reflect true
                            :unordered-maps true)]
           (println subprot "- Importing data")
           (import-data! ds)
           (println subprot "- Running tests")
-          (f))
+          (try
+            (f)
+            (finally
+              (teardown-db! db-spec))))
         (println subprot "- Tearing down DB")
-        (teardown-db! h2-spec)))))
+        (teardown-db! db-spec)))))
 
 (defmacro are= [& body]
   `(are [expected# actual#] (= expected# actual#)
@@ -196,9 +199,12 @@
                  :pk [:corge :grault]
                  :rels [{:name :f :ename :f :key :corge :other-key :foo}
                         {:name :a :ename :a :key :grault :other-key :baz}]}}
-        ds (c/data-source ds dm)]
+        ds (c/data-source ds dm)
+        expected-sql (if (= "mysql" (cds/get-subprotocol ds))
+                       ["SELECT `a`.`name` AS `a.qux` FROM `film` AS `f` LEFT JOIN `film_actor` AS `fa` ON `f`.`id` = `fa`.`film_id` LEFT JOIN `actor` AS `a` ON `fa`.`actor_id` = `a`.`id` WHERE 123 = `f`.`id`"]
+                       ["SELECT \"a\".\"name\" AS \"a.qux\" FROM \"film\" AS \"f\" LEFT JOIN \"film_actor\" AS \"fa\" ON \"f\".\"id\" = \"fa\".\"film_id\" LEFT JOIN \"actor\" AS \"a\" ON \"fa\".\"actor_id\" = \"a\".\"id\" WHERE 123 = \"f\".\"id\""])]
     (are=
-      (c/to-sql ds [:select :f.a.qux :where [:= 123 :foo]]) ["SELECT \"a\".\"name\" AS \"a.qux\" FROM \"film\" AS \"f\" LEFT JOIN \"film_actor\" AS \"fa\" ON \"f\".\"id\" = \"fa\".\"film_id\" LEFT JOIN \"actor\" AS \"a\" ON \"fa\".\"actor_id\" = \"a\".\"id\" WHERE 123 = \"f\".\"id\""])))
+      (c/to-sql ds [:select :f.a.qux :where [:= 123 :foo]]) expected-sql)))
 
 (deftest test-insert-update
   (let [ret-keys (c/insert! ds :language [{:name "Esperanto"}
@@ -229,9 +235,15 @@
     (is (empty? (c/query ds [:from :film-category :where [:= fid :film-id]])))
     (is (= epic (c/query1 ds [:from :category :where [:= :name "Epic"]])))
     (c/cascading-delete-ids! ds :category (:id epic)))
-  (let [[cid fid] (c/save! ds :film-category
-                           {:film {:title "TITLE" :language-id 1}
-                            :category {:name "CATEGORY"}})]
+  (let [ret (c/save! ds :film-category
+                     {:film {:title "TITLE" :language-id 1}
+                      :category {:name "CATEGORY"}})
+        [cid fid] (if (= [:film-id :category-id] (:pk (c/entity ds :film-category)))
+                    [(second ret) (first ret)]
+                    ret)]
+    (is (sequential? ret))
+    (is (number? cid))
+    (is (number? fid))
     (is (= "TITLE" (:title (c/by-id ds :film fid))))
     (is (= "CATEGORY" (:name (c/by-id ds :category cid))))
     (c/cascading-delete-ids! ds :film-category [fid cid])))
