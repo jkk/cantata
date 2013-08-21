@@ -30,21 +30,24 @@
 
 (defn make-rel
   "Transform a rel spec - a keyword or map - into a Rel record"
-  [m & [other-ents]]
+  [m & {:keys [this-pk this-name other-ents]}]
   (let [m (normalize-spec m)]
     (when-not (:name m)
       (throw "No :name provided for rel" {:rel-spec m}))
     (r/map->Rel
       (let [name (:name m)
-            ename (:ename m)]
+            ename (:ename m)
+            reverse? (:reverse m)]
         (cond-> m
                 (not ename) (assoc :ename name)
-                (and (not (:key m))
-                     (not (:reverse m))) (assoc :key (reflect/guess-rel-key name))
-                (and (not (:other-key m))
-                     other-ents) (as-> m
-                                       (assoc m :other-key (:pk (other-ents (:ename m)))))
-                (nil? (:reverse m)) (assoc :reverse false))))))
+                (and (not (:key m))) (assoc :key (if reverse?
+                                                   this-pk
+                                                   (reflect/guess-rel-key name)))
+                (and (not (:other-key m))) (as-> m
+                                                 (assoc m :other-key (if reverse?
+                                                                       (reflect/guess-rel-key this-name)
+                                                                       (:pk (get other-ents (:ename m))))))
+                (nil? reverse?) (assoc :reverse false))))))
 
 (defn make-shortcut
   "Transform a shortcut spec - a map or [path target-path] vector - into
@@ -82,7 +85,9 @@
                    (key field1))
                  (throw-info ["No :pk provided for entity" (:name m)]
                              {:entity-spec m}))
-          rels (ordered-map-by-name (:rels m) make-rel)
+          rels (ordered-map-by-name (:rels m) #(make-rel %
+                                                         :this-name (:name m)
+                                                         :this-pk pk))
           shortcuts (ordered-map-by-name (:shortcuts m) make-shortcut)]
       (cond-> (assoc m
                      :fields fields
@@ -99,23 +104,32 @@
                 (name (:name rel)) "."
                 (name from))))
 
+(defn ^:private add-generic-reverse-rel [oldrel newrel]
+  (if-not oldrel
+    newrel
+    (when (= (map #(get oldrel %) [:name :ename :key :other-key :reverse])
+             (map #(get newrel %) [:name :ename :key :other-key :reverse]))
+      oldrel)))
+
 (defn ^:private add-reverse-rels [ents ent rel]
-  (let [ename (:ename rel)
-        from (:name ent)
-        rrname (reverse-rel-name rel from) ;with qualifier - unique
-        rrel (make-rel {:name rrname
-                        :ename from
-                        :key (:other-key rel)
-                        :other-key (:key rel)
-                        :reverse true})
-        rrname2 from ;without qualifier - not necessarily unique
-        rrel2 (assoc rrel :name rrname2)]
-    (if (ents ename)
-      (-> ents
-        (assoc-in [ename :rels rrname] rrel)
-        ;; clear out the unqualified rel if necessary, to avoid ambiguity
-        (update-in [ename :rels rrname2] #(when-not %1 %2) rrel2))
-      ents)))
+  (if (:reverse rel)
+    ents
+    (let [ename (:ename rel)
+          from (:name ent)
+          rrname (reverse-rel-name rel from) ;with qualifier - unique
+          rrel (make-rel {:name rrname
+                          :ename from
+                          :key (:other-key rel)
+                          :other-key (:key rel)
+                          :reverse true})
+          rrname2 from ;without qualifier - not necessarily unique
+          rrel2 (assoc rrel :name rrname2)]
+      (if (ents ename)
+        (-> ents
+          (assoc-in [ename :rels rrname] rrel)
+          ;; clear out the unqualified rel if necessary, to avoid ambiguity
+          (update-in [ename :rels rrname2] add-generic-reverse-rel rrel2))
+        ents))))
 
 (declare validate-data-model data-model? entities fields rels shortcuts)
 
@@ -149,13 +163,17 @@
             ents (reduce
                    (fn [ents [ent rspec]]
                      (if rspec
-                       (let [rel (make-rel rspec ents)]
+                       (let [rel (make-rel rspec
+                                           :this-pk (:pk ent)
+                                           :this-name (:name ent)
+                                           :other-ents ents)]
                          (-> ents
                            (assoc-in [(:name ent) :rels (:name rel)] rel)
                            (add-reverse-rels ent rel)))
                        ents))
                    ents
-                   (for [[ent rspecs] (map list (vals ents)
+                   (for [[ent rspecs] (map list
+                                           (vals ents)
                                            (map :rels entity-specs))
                          rspec rspecs]
                      [ent rspec]))]
