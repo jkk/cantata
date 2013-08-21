@@ -182,6 +182,24 @@
 
 ;; TODO: tests that exercise nest-in logic
 
+(deftest test-custom-names
+  (let [dm {:f {:db-name "film"
+                :fields [{:name :foo :db-name "id"}
+                         {:name :bar :db-name "title"}]
+                :shortcuts {:a :fa.a}}
+            :a {:db-name "actor"
+                :fields [{:name :baz :db-name "id"}
+                         {:name :qux :db-name "name"}]}
+            :fa {:db-name "film_actor"
+                 :fields [{:name :corge :db-name "film_id"}
+                          {:name :grault :db-name "actor_id"}]
+                 :pk [:corge :grault]
+                 :rels [{:name :f :ename :f :key :corge :other-key :foo}
+                        {:name :a :ename :a :key :grault :other-key :baz}]}}
+        ds (c/data-source ds dm)]
+    (are=
+      (c/to-sql ds [:select :f.a.qux :where [:= 123 :foo]]) ["SELECT \"a\".\"name\" AS \"a.qux\" FROM \"film\" AS \"f\" LEFT JOIN \"film_actor\" AS \"fa\" ON \"f\".\"id\" = \"fa\".\"film_id\" LEFT JOIN \"actor\" AS \"a\" ON \"fa\".\"actor_id\" = \"a\".\"id\" WHERE 123 = \"f\".\"id\""])))
+
 (deftest test-insert-update
   (let [ret-keys (c/insert! ds :language [{:name "Esperanto"}
                                           {:name "Klingon"}])
