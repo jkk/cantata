@@ -1,9 +1,4 @@
-- tests - use cantata-sample code
 - check that recursive rels are possible
-- subqueries; complex examples:
-	- http://www.reddit.com/r/Python/comments/olech/is_django_considered_pythonic_now/c3ijtk9
-	- https://bitbucket.org/sqlalchemy/sqlalchemy/src/be354023de1c34d97b12ba3af316df7ac5761908/test/orm/_fixtures.py
-	- https://gist.github.com/3783529
 - subquery in :from? https://gist.github.com/3984333
 - export/import :bytes data
 	- can use staff picture from original sakila data to test

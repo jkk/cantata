@@ -45,8 +45,10 @@
       (identifier (-> x :root :name) fname quoting))))
 
 (defmethod qualify :joined-field [x quoting]
-  (let [fname (-> x :resolved :value :db-name)]
-    (identifier (-> x :final-path cu/unqualify first) fname quoting)))
+  (if-let [fname (-> x :resolved :value :db-name)]
+    (identifier (-> x :final-path cu/unqualify first) fname quoting)
+    (let [[qual basename] (cu/unqualify (:final-path x))]
+      (identifier qual basename quoting))))
 
 (defmethod qualify :agg-op [x quoting]
   (let [v (-> x :resolved :value)

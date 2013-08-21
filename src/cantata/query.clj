@@ -502,8 +502,48 @@
   (let [[q env] (expand-query dm q :env (push-env env {}))]
     (with-meta q {::env env})))
 
+(defn ^:private expand-join-subquery [dm env [q env] clause]
+  (if-not (contains? q clause)
+    [q env]
+    (let [q (assoc q
+                   clause (vec
+                            (map-indexed
+                              (fn [i el]
+                                (if (odd? i)
+                                  el
+                                  (let [el1 (first el)]
+                                    (if (and (map? el1)
+                                             (not (dm/entity? el1)))
+                                      [(expand-subquery dm el1 env)
+                                       (second el)]
+                                      el))))
+                              (clause q))))
+          joins (get-join-clauses q)
+          alias-jenv (for [[to on] (partition 2 joins)
+                           :when (map? (first to))]
+                       [(second to) (::env (meta (first to)))])
+          env (reduce
+                (fn [env [jpath jrp]]
+                  (env-assoc env jpath jrp))
+                env
+                (for [[alias jenv] alias-jenv
+                      [jpath jrp] (immediate-env jenv)
+                      :when (keyword? jpath)
+                      :let [final-path (cu/join-path alias jpath)
+                            jrp (assoc jrp
+                                       :final-path final-path
+                                       :resolved (r/->Resolved
+                                                   :joined-field
+                                                   (:value (:resolved jrp))))]]
+                  [final-path jrp]))]
+      [q env])))
+
 (defn ^:private expand-subqueries [dm q subqs env]
-  (let [;; subqueries in :select, :where, and :having
+  (let [;; subqueries in join clauses
+        [q env] (reduce
+                  #(expand-join-subquery dm env %1 %2)
+                  [q env] join-clauses)
+        ;; subqueries in :select, :where, and :having
         q (if (empty? subqs)
             q
             (let [smap (zipmap subqs
@@ -513,27 +553,8 @@
                 q
                 :select (vec (replace smap (:select q)))
                 :where (replace-predicate-fields (:where q) smap)
-                :having (replace-predicate-fields (:having q) smap))))
-        ;; subqueries in join clauses
-        q (reduce
-            (fn [q clause]
-              (if-not (contains? q clause)
-                q
-                (assoc q
-                       clause (vec
-                                (map-indexed
-                                  (fn [i el]
-                                    (if (odd? i)
-                                      el
-                                      (let [el1 (first el)]
-                                        (if (and (map? el1)
-                                                 (not (dm/entity? el1)))
-                                          [(expand-subquery dm el1 env)
-                                           (second el)]
-                                          el))))
-                                  (clause q))))))
-            q [:join :left-join :right-join])]
-    q))
+                :having (replace-predicate-fields (:having q) smap))))]
+    [q env]))
 
 (defn ^:private resolve-joined-field [env path]
   (let [[qual basename] (cu/unqualify path)]
@@ -558,6 +579,10 @@
   Returns a ResolvedPath record or nil."
   [dm ent env path & opts]
   (or
+    (when (vector? path)
+      (let [[path alias] path]
+        (let [rp (apply resolve-path dm ent env path opts)]
+          (r/->ResolvedPath alias ent (:chain rp) (:resolved rp) (:shortcuts rp)))))
     (env-get env path 0)
     (resolve-joined-field env path)
     (when (vector? env)
@@ -580,10 +605,11 @@
     env
     (if-let [rp (apply resolve-path dm ent env path opts)]
       (let [env (env-assoc env path rp)
-            final-path (:final-path rp)]
-        (if (= final-path path)
-          env
-          (env-assoc env final-path rp)))
+            final-path (:final-path rp)
+            alias (when (vector? path) (first path))]
+        (cond-> env
+                (not= final-path path) (env-assoc final-path rp)
+                alias (env-assoc alias rp)))
       (throw-info ["Unrecognized path" path "for entity" (:name ent)]
                   {:path path :ename (:name ent) :env env}))))
 
@@ -698,7 +724,7 @@
                                          dm ent env join-fields)]
                                [q env (distinct (concat all-fields join-fields))]))
         subqs (filter map? all-fields)
-        q (expand-subqueries dm q subqs env)
+        [q env] (expand-subqueries dm q subqs env)
         [q env added-paths] (if force-pk
                               (force-pks dm ent env q)
                               [q env])]
