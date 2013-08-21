@@ -520,7 +520,7 @@ query.
 * `problem [keys-or-msg] [keys msg]`
 * `resolve-path [ds ename path]`
 
-### Accessors
+### Introspection
 
 * `data-model [ds]`
 * `entities [ds]`
