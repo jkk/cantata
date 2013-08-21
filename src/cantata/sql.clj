@@ -42,7 +42,7 @@
         chain (:chain x)]
     (if (seq chain)
       (identifier (-> chain peek :to-path) fname quoting)
-      (identifier (-> x :root :name) fname quoting))))
+      (identifier (-> x :root :db-name) fname quoting))))
 
 (defmethod qualify :joined-field [x quoting]
   (let [fname (-> x :resolved :value :db-name)]
@@ -61,7 +61,7 @@
                                                      :style quoting :split false)
                                 ".*"))
                    (identifier (-> chain peek :to-path) fname quoting))
-                 (identifier (-> x :root :name) fname quoting))))))
+                 (identifier (-> x :root :db-name) fname quoting))))))
 
 (defmethod qualify :param [x quoting]
   (-> x :resolved :value))
@@ -82,13 +82,16 @@
 
 (declare qualify-query)
 
+(defn ^:private get-subquery-env [subq]
+  (:cantata.query/env (meta subq)))
+
 (defmethod qualify-clause :select [_ select quoting env]
   (for [path select]
     (let [[field alias] (if (vector? path)
                           path
                           [path])
           qfield (if (map? field)
-                   (qualify-query field quoting env)
+                   (qualify-query field quoting (or (get-subquery-env field) env))
                    (qualify (env field field) quoting))]
       (if (or (= :* field) (cq/wildcard? field))
         qfield
@@ -102,7 +105,7 @@
     (let [fields (cq/get-predicate-fields pred)
           smap (into {} (for [f fields]
                           [f (if (map? f)
-                               (qualify-query f quoting env)
+                               (qualify-query f quoting (or (get-subquery-env f) env))
                                (qualify (env f f) quoting))]) )]
       (cq/replace-predicate-fields pred smap))))
 
@@ -136,7 +139,7 @@
                         ename)
                  qpath (identifier path quoting)
                  qename (if (map? ename)
-                          (qualify-query ename quoting env)
+                          (qualify-query ename quoting (or (get-subquery-env ename) env))
                           (qualify (env path path) quoting))
                  on* (qualify-pred-fields on quoting env)]
              [[qename qpath] on*]))
