@@ -321,7 +321,7 @@
   (java.sql.Timestamp. (.getTime d)))
 
 (defn date->sql-date [^java.util.Date d]
-  (java.sql.Date (.getTime d)))
+  (java.sql.Date. (.getTime d)))
 
 (defn date->sql-time [^java.util.Date d]
   (java.sql.Time. (.getTime d)))
