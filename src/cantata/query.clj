@@ -473,9 +473,10 @@
           join [[(:name to) to-alias] (merge-on pred where)]]
       (concat join (build-joins (rest chain) shortcuts)))))
 
-(defn ^:private distinct-joins [joins]
-  (apply concat (cu/distinct-key (comp second first)
-                                 (partition 2 joins))))
+(defn ^:private distinct-joins [joins & [already-joined]]
+  (let [joins (cond->> (partition 2 joins)
+                       already-joined (remove (comp already-joined second first)))]
+    (apply concat (cu/distinct-key (comp second first) joins))))
 
 (defn ^:private expand-implicit-joins [q env]
   (let [chains (keep (comp seq :chain)
@@ -497,7 +498,8 @@
       q
       (assoc q join-clause (doall (distinct-joins
                                     (concat (join-clause q)
-                                            joins)))))))
+                                            joins)
+                                    already-joined))))))
 
 (defn ^:private expand-rel-joins [q env clause]
   (reduce
