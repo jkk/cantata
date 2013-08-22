@@ -1050,7 +1050,7 @@
         [many-fields one-fields] ((juxt filter remove)
                                   has-many?
                                   (:select eq))
-        get-path #(or (:final-path env %) %)
+        get-path #(or (:final-path (env %)) %)
         many-rel-names (set (map (comp cu/qualifier get-path)
                                  many-fields))
         select-paths (map get-path (:select eq))
