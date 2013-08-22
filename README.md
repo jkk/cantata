@@ -295,11 +295,11 @@ A query can be a map, or a vector of zero or more maps followed by zero or more 
 Any maps or clauses after the first will be merged according to the semantics of the clause. The `build` function can be used to turn a vector query into a map. For example:
 
 ```clj
-(c/build [{:from :film :select :id :where [:= \"R\" :rating]}
+(c/build [{:from :film :select :id :where [:= "R" :rating]}
           :select :title :where [:< 90 :length]])
 => {:from :film
     :select [:id :title]
-    :where [:and [:= \"R\" :rating] [:< 90 :length]]}
+    :where [:and [:= "R" :rating] [:< 90 :length]]}
 ```
 
 Any paths to related entities referenced outside of `:include` and `:with` will trigger outer joins when the query is executed.
