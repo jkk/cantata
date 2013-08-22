@@ -62,7 +62,8 @@
    :joda-dates cp/date->joda})
 
 (def ^:private marshal-fnmap
-  {:joda-dates cp/joda->date})
+  {:joda-dates cp/joda->date
+   :marshal-dates cp/joda->date})
 
 (defn ^:private make-marshalling-fn [opts fnmap]
   (when-let [fs (seq (for [[opt v] opts
@@ -76,7 +77,8 @@
         [dm opts] (if (keyword? arg1)
                     [nil model+opts]
                     [arg1 (rest model+opts)])
-        opts (apply hash-map opts)
+        opts (assoc (apply hash-map opts)
+                    :marshal-dates true)
         ds (normalize-db-spec db-spec)
         ds (if (:pooled opts)
              (create-pool (merge ds opts))
