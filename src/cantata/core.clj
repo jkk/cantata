@@ -167,7 +167,7 @@
          :with - like :include but performs an inner join
       :without - return results that have no related entity records for the
                  provided relationship names
-         :join - explicit inner join; e.g., [[foo :f] [:= :id :f.id]]
+         :join - explicit inner join; e.g., [[:foo :f] [:= :id :f.id]]
     :left-join - explicit left outer join
       :options - a map with the following optional keys:
                    :join-type - whether to perform an :outer (the default) or
