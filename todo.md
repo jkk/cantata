@@ -8,6 +8,8 @@
 - subquery in :from? https://gist.github.com/3984333
 - export/import :bytes data
 	- #base64 reader tag (should add namespace?)
+	- wrap in container type, define print-method for that
+	- crib from https://github.com/hiredman/bytes/blob/master/src/com/thelastcitadel/bytes.clj
 	- can use staff picture from original sakila data to test
 - allow ad-hoc entities in join, include, etc
 	- must add them to qenv
