@@ -55,7 +55,7 @@ create table film(
     rental_rate decimal(4, 2) default 4.99 not null,
     length smallint default null,
     replacement_cost decimal(5, 2) default 19.99 not null,
-    rating varchar(20) default 'g' not null,
+    rating varchar(20) default 'G' not null,
     special_features varchar(255) default null
 );            
 create index idx_title on film(title);           
