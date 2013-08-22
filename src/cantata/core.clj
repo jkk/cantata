@@ -174,6 +174,10 @@
                                 :inner join for fields selected from related
                                 entities
 
+  Where applicable, there are variants of each clause with a :replace- or :un-
+  prefix. For example, :replace-select will replace, rather than merge, the
+  :select clause; and :un-select will remove fields from :select.
+
   Predicates are vectors of the form [op arg1 arg2 ...], where args are
   paths, other predicates, etc. Built-in ops:
 
