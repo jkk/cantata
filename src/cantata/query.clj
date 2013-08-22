@@ -214,7 +214,7 @@
             q)]
     (expand-from q)))
 
-(def ^:private logic-ops #{:and :or :xor :not})
+(def logic-ops #{:and :or :xor :not})
 
 (defn ^:private get-predicate-fields* [x]
   (if (or (map? x) (keyword? x))

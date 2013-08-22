@@ -68,10 +68,10 @@ Cantata can leverage the data model to perform queries that smartly combine resu
 The following query fetches the film with id 1, plus related language, category, and actor data -- all in one database round trip, and nicely nested:
 
 ```clj
-(c/query ds [:from :film
+(c/query ds {:from :film
              :select [:id :title :release-year]
              :include [:language :category :actor]
-             :where [:= 1 :id]])
+             :where [:= 1 :id]})
 
 => [{:id 1
      :title "ACADEMY DINOSAUR"
@@ -120,6 +120,39 @@ You can tell Cantata to fetch data from related tables in multiple database roun
 Both fetching strategies -- single vs. multiple round trips -- have benefits and costs. Cantata lets you choose.
 
 You can also perform explicit joins if you wish.
+
+### Query DSL
+
+Because queries are simple data, you can build them up yourself using the usual Clojure tools (see [Query Format](#query-format)). However, Cantata also provides helper functions in the `canata.dsl` namespace for building queries piecemeal:
+
+```clj
+(ns example.core
+  (:require [cantata.core :as c]
+            [cantata.dsl :refer [from select un-select where]]]))
+;; ...
+(c/query ds (-> (from :film)
+                (select :title :release-year)
+                (where {:rating "R" :length 120}))) ;sugar syntax
+```
+
+The default behavior for helper functions is to merge: e.g., `(select q :length)` will _add_ `:length` to the `:select` clause. There are variant helpers with `replace-` and `un-` prefixes to replace and remove elements from clauses, respectively.
+
+Helper functions always return a vector query (which query functions will accept). To turn the query into a fully-merged map, use `build`:
+
+```clj
+(c/build (-> (from :film)
+             (select :title :release-year :length)
+             (un-select :length)
+             (where {:rating "R"})
+             (where :or [:< 10 :%count.actor.id] [:language.name "French"])))
+=> {:from :film
+    :select (:title :release-year),
+    :where [:and
+            [:= :rating "R"]
+            [:or [:< 10 :%count.actor.id] [:language.name "French"]]]}
+```
+
+The helper functions are by no means required; use them or not according to your taste.
 
 ### Saving
 
@@ -340,7 +373,7 @@ the :select clause; and :un-select will remove fields from :select.
 Predicates are vectors of the form [op arg1 arg2 ...], where args are
 paths, other predicates, etc. Built-in ops:
 
-    :and :or and :xor
+    :and :or :xor :not
     := :not= :< :<= :> :>=
     :in :not-in :like :not-like :between
     :+ :- :* :/ :% :mod :| :& :^

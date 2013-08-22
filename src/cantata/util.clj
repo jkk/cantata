@@ -90,6 +90,9 @@
 (defn seqify [x]
   (if (sequential? x) x [x]))
 
+(defn vecify [x]
+  (if (vector? x) x [x]))
+
 (defn distinct-key
   "Returns a lazy sequence of the elements of coll with (k element)
   duplicates removed"

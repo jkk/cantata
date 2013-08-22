@@ -181,7 +181,7 @@
   Predicates are vectors of the form [op arg1 arg2 ...], where args are
   paths, other predicates, etc. Built-in ops:
 
-    :and :or and :xor
+    :and :or :xor :not
     := :not= :< :<= :> :>=
     :in :not-in :like :not-like :between
     :+ :- :* :/ :% :mod :| :& :^
