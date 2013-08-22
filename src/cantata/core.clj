@@ -539,7 +539,9 @@
   ([ds ename-or-ent values]
     (let [dm (cds/get-data-model ds)
           ent (if (keyword? ename-or-ent)
-                (cdm/entity dm ename-or-ent)
+                (or (cdm/entity dm ename-or-ent)
+                    (throw-info ["Unrecognized entity" ename-or-ent]
+                                {:ename ename-or-ent}))
                 ename-or-ent)
           [fnames values] (if (map? values)
                             [(keys values) (vals values)]
@@ -548,7 +550,9 @@
   ([ds ename-or-ent fnames values]
     (let [dm (cds/get-data-model ds)
           ent (if (keyword? ename-or-ent)
-                (cdm/entity dm ename-or-ent)
+                (or (cdm/entity dm ename-or-ent)
+                    (throw-info ["Unrecognized entity" ename-or-ent]
+                                {:ename ename-or-ent}))
                 ename-or-ent)
           joda-dates? (cds/get-option ds :joda-dates)]
       (cpa/parse ent fnames values :joda-dates joda-dates?))))
@@ -599,7 +603,9 @@
   [ds ename m-or-ms & {:keys [validate return-keys]}]
   (let [ms (cu/seqify m-or-ms)
         dm (cds/get-data-model ds)
-        ent (cdm/entity dm ename)
+        ent (or (cdm/entity dm ename)
+                (throw-info ["Unrecognized entity" ename]
+                            {:ename ename}))
         ms* (map #(prep-map ent % validate) ms)]
     (cdm/invoke-hook ent :before-insert ms*)
     (let [ret-keys (sql/insert! (force ds) dm ename ms* :return-keys return-keys)
@@ -618,7 +624,9 @@
   Returns the number of records affected by the update."
   [ds ename values pred & {:keys [validate]}]
   (let [dm (cds/get-data-model ds)
-        ent (cdm/entity dm ename)
+        ent (or (cdm/entity dm ename)
+                (throw-info ["Unrecognized entity" ename]
+                            {:ename ename}))
         values* (prep-map ent values validate)]
     (cdm/invoke-hook ent :before-update values*)
     (let [ret (sql/update! (force ds) dm ename values* pred)]
@@ -634,7 +642,9 @@
     (delete! ds ename nil))
   ([ds ename pred & {:as opts}]
     (let [dm (cds/get-data-model ds)
-          ent (cdm/entity dm ename)]
+          ent (or (cdm/entity dm ename)
+                  (throw-info ["Unrecognized entity" ename]
+                              {:ename ename}))]
       (cdm/invoke-hook ent :before-delete pred)
       (let [ret (sql/delete! (force ds) dm ename pred)]
         (cdm/invoke-hook ent :after-delete pred ret)
@@ -845,7 +855,9 @@
       :save-rels    - when false, does not save related records"
   [ds ename values & {:keys [validate save-rels] :as opts}]
   (let [dm (cds/get-data-model ds)
-        ent (cdm/entity dm ename)
+        ent (or (cdm/entity dm ename)
+                (throw-info ["Unrecognized entity" ename]
+                            {:ename ename}))
         own-m (get-own-map ent values)]
     (cdm/invoke-hook ent :before-save ename values)
     (let [ret (with-transaction ds
@@ -866,7 +878,9 @@
                       (by-id ds ename id-to-keep))]
     (save! ds ename keep-m)
     (let [dm (cds/get-data-model ds)
-          ent (cdm/entity dm ename)
+          ent (or (cdm/entity dm ename)
+                  (throw-info ["Unrecognized entity" ename]
+                              {:ename ename}))
           pk (:pk ent)
           npk (cdm/normalize-pk pk)
           deps (cdm/dependent-graph dm)]
