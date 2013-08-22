@@ -417,7 +417,7 @@
   (mapcat get-predicate-fields (get-join-predicates q)))
 
 (defn get-join-aliases [q]
-  (map #(if (vector? %) (first %) %)
+  (map #(if (vector? %) (second %) %)
        (take-nth 2 (get-join-clauses q))))
 
 (defn get-all-fields
