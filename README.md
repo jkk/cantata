@@ -69,8 +69,8 @@ The following query fetches the film with id 1, plus related language, category,
 
 ```clj
 (c/query ds {:from :film
-             :select [:id :title :release-year]
-             :include [:language :category :actor]
+             :select [:id :title :release-year
+                      :language :category :actor]
              :where [:= 1 :id]})
 
 => [{:id 1
@@ -113,7 +113,7 @@ You can tell Cantata to fetch data from related tables in multiple database roun
 ```clj
 ;; 3 database round trips - an extra for each to-many relationship
 (c/querym ds [:from :film
-              :include [:language :category :actor]
+              :select [:* :language :category :actor]
               :limit 10])
 ```
 
@@ -335,11 +335,14 @@ Any maps or clauses after the first will be merged according to the semantics of
     :where [:and [:= "R" :rating] [:< 90 :length]]}
 ```
 
-Any paths to related entities referenced outside of `:include` and `:with` will trigger outer joins when the query is executed.
+Any paths to related entities referenced outside of `:with` will trigger outer
+joins when the query is executed. Use the `:with` clause to trigger an inner
+join instead.
 
 Supported clauses:
 
-         :from - name of the entity to query
+         :from - name of the entity to query; if not provided, will be
+                 inferred from :select
        :select - wildcards or paths of fields, relationships, or aggregates to
                  select; unlike SQL, unqualified names will be assumed to refer
                  to the :from entity
@@ -445,7 +448,7 @@ to fetch the related results.
 ```clj
 ;; 3 database round trips - one for each to-many relationship
 (c/querym ds [:from :film
-              :include [:language :category :actor]
+              :select [:* :language :category :actor]
               :limit 10])
 ```
 
@@ -458,7 +461,7 @@ clause will not affect these).
 ```clj
 ;; 3 database round trips, one result
 (c/querym1 ds [:from :film
-               :include [:language :category :actor]])
+               :select [:* :language :category :actor]])
 ```
 
 #### `query-count [ds q & opts]`

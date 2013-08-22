@@ -142,12 +142,14 @@
         :select [:id :title]
         :where [:and [:= \"R\" :rating] [:< 90 :length]]}
 
-  Any paths to related entities referenced outside of :include and :with will
-  trigger outer joins when the query is executed.
+  Any paths to related entities referenced outside of :with will trigger outer
+  joins when the query is executed. Use the :with clause to trigger an inner
+  join instead.
 
   Supported clauses:
 
-         :from - name of the entity to query
+         :from - name of the entity to query; if not provided, will be
+                 inferred from :select
        :select - wildcards or paths of fields, relationships, or aggregates to
                  select; unlike SQL, unqualified names will be assumed to refer
                  to the :from entity

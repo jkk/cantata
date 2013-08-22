@@ -63,9 +63,8 @@
     (into {} (for [[k v] clause-val]
                [k (normalize-incl-opts v)]))
     (if (sequential? clause-val)
-      (zipmap clause-val
-              (repeat {:select [:*]}))
-      {clause-val {:select [:*]}})))
+      (zipmap clause-val (repeat {}))
+      {clause-val {}})))
 
 (defmethod normalize-clause :include [[_ clause-val]]
   (normalize-include clause-val))

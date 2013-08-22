@@ -119,7 +119,7 @@
 
 (deftest test-querying
   (let [full-film {:from :film
-                   :include [:category :actor :language :original-language]}
+                   :select [:* :category :actor :language :original-language]}
         canada-q {:from :film
                   :select [:title :language.name :actor.name]
                   :where [:= "Canada" :renter.country-name]}
@@ -153,7 +153,7 @@
       (c/query1 ds "select * from actor where id = 1") {:name "PENELOPE GUINESS", :id 1}
       (c/query1 ds ["select id from category where name=?" "Action"]) {:id 1}
       (count (c/query ds kid-film-q)) 5
-      (setify (c/query ds [:from :film :select [:id :title] :include :actor :where [:= 1 :id]] :flat true)) (setify '({:actor.name "PENELOPE GUINESS", :actor.id 1, :title "ACADEMY DINOSAUR", :id 1} {:actor.name "CHRISTIAN GABLE", :actor.id 10, :title "ACADEMY DINOSAUR", :id 1} {:actor.name "LUCILLE TRACY", :actor.id 20, :title "ACADEMY DINOSAUR", :id 1} {:actor.name "SANDRA PECK", :actor.id 30, :title "ACADEMY DINOSAUR", :id 1} {:actor.name "JOHNNY CAGE", :actor.id 40, :title "ACADEMY DINOSAUR", :id 1} {:actor.name "MENA TEMPLE", :actor.id 53, :title "ACADEMY DINOSAUR", :id 1} {:actor.name "WARREN NOLTE", :actor.id 108, :title "ACADEMY DINOSAUR", :id 1} {:actor.name "OPRAH KILMER", :actor.id 162, :title "ACADEMY DINOSAUR", :id 1} {:actor.name "ROCK DUKAKIS", :actor.id 188, :title "ACADEMY DINOSAUR", :id 1} {:actor.name "MARY KEITEL", :actor.id 198, :title "ACADEMY DINOSAUR", :id 1}))
+      (setify (c/query ds [:from :film :select [:id :title :actor] :where [:= 1 :id]] :flat true)) (setify '({:actor.name "PENELOPE GUINESS", :actor.id 1, :title "ACADEMY DINOSAUR", :id 1} {:actor.name "CHRISTIAN GABLE", :actor.id 10, :title "ACADEMY DINOSAUR", :id 1} {:actor.name "LUCILLE TRACY", :actor.id 20, :title "ACADEMY DINOSAUR", :id 1} {:actor.name "SANDRA PECK", :actor.id 30, :title "ACADEMY DINOSAUR", :id 1} {:actor.name "JOHNNY CAGE", :actor.id 40, :title "ACADEMY DINOSAUR", :id 1} {:actor.name "MENA TEMPLE", :actor.id 53, :title "ACADEMY DINOSAUR", :id 1} {:actor.name "WARREN NOLTE", :actor.id 108, :title "ACADEMY DINOSAUR", :id 1} {:actor.name "OPRAH KILMER", :actor.id 162, :title "ACADEMY DINOSAUR", :id 1} {:actor.name "ROCK DUKAKIS", :actor.id 188, :title "ACADEMY DINOSAUR", :id 1} {:actor.name "MARY KEITEL", :actor.id 198, :title "ACADEMY DINOSAUR", :id 1}))
       (count (c/getf :_language.film (c/query ds rev-lang-q))) 500
       cn1 cn2
       cn2 (set '("Sports" "Classics" "Family" "Foreign" "Documentary" "Games" "Action" "New" "Animation"))
@@ -170,9 +170,9 @@
             pq (c/prepare-query
                  ds (assoc canada-q :where [:= :?country :renter.country-name]))
             r3 (setify (c/query ds pq :params {:country "Canada"}))
-            r4 (setify (c/by-id ds :film 1 [:include [:category :language]]))
-            r5 (setify (c/query1 ds [:from :film :where [:= 1 :id] :include [:category :language]]))
-            r6 (setify (c/querym1 ds [:from :film :where [:= 1 :id] :include [:category :language]]))]
+            r4 (setify (c/by-id ds :film 1 [:select [:* :category :language]]))
+            r5 (setify (c/query1 ds [:from :film :where [:= 1 :id] :select [:* :category :language]]))
+            r6 (setify (c/querym1 ds [:from :film :where [:= 1 :id] :select [:* :category :language]]))]
         (are=
           47 (count r1)
           r1 r2
@@ -222,7 +222,7 @@
                                           {:id 4}   ;Classics
                                           {:name "Epic"}]})
         epic (c/query1 ds [:from :category :where [:= :name "Epic"]])
-        loa (c/by-id ds :film fid [:include [:category :language]])]
+        loa (c/by-id ds :film fid [:select [:* :category :language]])]
     (c/save! ds :film {:id 1001 :release-year 1962})
     (is (= 1962 (c/queryf1 ds [:select :film.release-year :where [:= fid :id]])))
     (is (pos? fid))
