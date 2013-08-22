@@ -2,6 +2,7 @@
 	- select, where, etc
 	- belongs-to, has-one, has-many
 - tests for recursive rels
+- allow saving has-one rels?
 - postgres array support
 	- reify java.sql.Array?
 	- see http://tech.valgog.com/2009/02/passing-arrays-to-postgresql-database.html
