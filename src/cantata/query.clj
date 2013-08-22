@@ -91,6 +91,9 @@
 (defmethod merge-clause :default [q [clause clause-val]]
   (assoc q clause clause-val))
 
+(defmethod merge-clause :select [q [_ clause-val]]
+  (update-in q [:select] concat clause-val))
+
 (defmethod merge-clause :where [q [_ clause-val]]
   (merge-where q clause-val))
 
@@ -117,6 +120,15 @@
 
 (defmethod merge-clause :options [q [_ clause-val]]
   (update-in q [:options] merge clause-val))
+
+(defmethod merge-clause :order-by [q [_ clause-val]]
+  (update-in q [:order-by] concat clause-val))
+
+(defmethod merge-clause :group-by [q [_ clause-val]]
+  (update-in q [:group-by] concat clause-val))
+
+(defmethod merge-clause :modifiers [q [_ clause-val]]
+  (update-in q [:modifiers] concat clause-val))
 
 (defn merge-clauses
   "Normalized and merges the given clauses into query map `q`."

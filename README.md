@@ -183,12 +183,14 @@ the entity as values; or a collection of maps describing the entities.
 
 Example (map format):
 
-    {:film       {:fields [:id :title]
-                  :shortcuts {:actor :film-actor.actor}}
-     :actor      {:fields [:id :name]}
-     :film-actor {:fields [:film-id :actor-id]
-                  :pk [:film-id :actor-id]
-                  :rels [:film :actor]}}
+```clj
+{:film       {:fields [:id :title]
+              :shortcuts {:actor :film-actor.actor}}
+ :actor      {:fields [:id :name]}
+ :film-actor {:fields [:film-id :actor-id]
+              :pk [:film-id :actor-id]
+              :rels [:film :actor]}}
+```
 
 Entity descriptor maps can contain the following keys:
 
@@ -286,7 +288,19 @@ it's used.
 
 A query can be a map, or a vector of zero or more maps followed by zero or more keyword-value clauses. For example:
 
-    [{:from :film} :select [:title :actor.name] :limit 1]
+```clj
+[{:from :film} :select [:title :actor.name] :limit 1]
+```
+
+Any maps or clauses after the first will be merged according to the semantics of the clause. The `build` function can be used to turn a vector query into a map. For example:
+
+```clj
+(c/build [{:from :film :select :id :where [:= \"R\" :rating]}
+          :select :title :where [:< 90 :length]])
+=> {:from :film
+    :select [:id :title]
+    :where [:and [:= \"R\" :rating] [:< 90 :length]]}
+```
 
 Any paths to related entities referenced outside of `:include` and `:with` will trigger outer joins when the query is executed.
 

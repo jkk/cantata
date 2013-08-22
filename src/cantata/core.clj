@@ -133,6 +133,15 @@
 
     (build {:from :film} :select [:title :actor.name] :limit 1)
 
+  Any maps or clauses after the first will be merged according to the
+  semantics of the clause. For example:
+
+    (build {:from :film :select :id :where [:= \"R\" :rating]}
+           :select :title :where [:< 90 :length])
+    => {:from :film
+        :select [:id :title]
+        :where [:and [:= \"R\" :rating] [:< 90 :length]]}
+
   Any paths to related entities referenced outside of :include and :with will
   trigger outer joins when the query is executed.
 
@@ -179,7 +188,9 @@
 
   Bindable parameters are denoted with a leading ? - e.g., :?actor-name"
   [& qargs]
-  (apply cq/build-query qargs))
+  (apply cq/build-query (if (vector? (first qargs))
+                          (first qargs)
+                          qargs)))
 
 (defn with-query-rows*
   "Helper function for with-query-rows"
