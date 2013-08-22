@@ -1,5 +1,6 @@
-- cantata.dsl namespace?
-	- select, where, etc
+- marshal values in :where
+	- pair up values with fields? impossible to do generically? good enough?
+- dsl for rels?
 	- belongs-to, has-one, has-many
 - tests for recursive rels
 - allow saving has-one rels?

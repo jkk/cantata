@@ -235,18 +235,20 @@
                                prepped? [(:expanded-query q) (:env q) (:added-paths q)]
                                (or expanded (plain-sql? q)) [q env]
                                :else (cq/expand-query dm q :force-pk force-pk))
-        sql-params (if prepped?
-                     (into [(:sql q)] (map #(get params %) (:param-names q)))
-                     (to-sql eq
-                             :data-model dm
-                             :quoting (cds/get-quoting ds)
-                             :expanded true
-                             :env env
-                             :params params))
-        _ (when cu/*verbose* (prn sql-params))
+        [sql & sql-params] (if prepped?
+                             (into [(:sql q)] (map #(get params %) (:param-names q)))
+                             (to-sql eq
+                                     :data-model dm
+                                     :quoting (cds/get-quoting ds)
+                                     :expanded true
+                                     :env env
+                                     :params params))
+        marshaller (cds/get-marshaller ds)
+        jdbc-q (into [sql] (map marshaller sql-params))
+        _ (when cu/*verbose* (prn jdbc-q))
         from-ent (cdm/entity dm (:from eq))
         row-fn (get-row-fn ds eq from-ent env)
-        [cols & rows] (jd/query ds sql-params
+        [cols & rows] (jd/query ds jdbc-q
                                 :identifiers dasherize
                                 :row-fn row-fn
                                 :as-arrays? true)
