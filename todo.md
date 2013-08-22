@@ -1,6 +1,13 @@
-- check that recursive rels are possible
+- cantata.dsl namespace?
+	- select, where, etc
+	- belongs-to, has-one, has-many
+- tests for recursive rels
+- postgres array support
+	- reify java.sql.Array?
+	- see http://tech.valgog.com/2009/02/passing-arrays-to-postgresql-database.html
 - subquery in :from? https://gist.github.com/3984333
 - export/import :bytes data
+	- #base64 reader tag (should add namespace?)
 	- can use staff picture from original sakila data to test
 - allow ad-hoc entities in join, include, etc
 	- must add them to qenv
@@ -14,10 +21,8 @@
 - derived fields - fn of one or more other paths
 - have expand-query return all final paths, so it matches query results?
 - move hooks into data source?
-- use lazymap for data-source map
-- use instaparse to parse sql strings?
 - auto-add two-hop reverse rels? e.g., film -> actor
-- lein-cantata plugin; auto gen schema from db
+- lein-cantata plugin; auto gen model from db
 - batched query; leverage limit/offset
 - field aliasing? doc support or lack thereof
 - :readonly entity key?
