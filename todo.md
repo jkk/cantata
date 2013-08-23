@@ -1,28 +1,35 @@
-- marshal values in :where
-	- pair up values with fields? impossible to do generically? good enough?
-- dsl for rels?
-	- belongs-to, has-one, has-many
+- per ds/dm hooks - after-query, before-save
+- java logging
+	- trace logging
 - tests for recursive rels
 - allow saving has-one rels?
-- postgres array support
-	- reify java.sql.Array?
-	- see http://tech.valgog.com/2009/02/passing-arrays-to-postgresql-database.html
-- subquery in :from? https://gist.github.com/3984333
 - export/import :bytes data
 	- #base64 reader tag (should add namespace?)
 	- wrap in container type, define print-method for that
 	- crib from https://github.com/hiredman/bytes/blob/master/src/com/thelastcitadel/bytes.clj
 	- can use staff picture from original sakila data to test
+- custom :on rel clause
+- inner join when implicit joins in :where and nil not used
+- postgres array support
+	- reify java.sql.Array?
+	- see http://tech.valgog.com/2009/02/passing-arrays-to-postgresql-database.html
+- derived fields - fn of one or more other paths
+- traverse into SqlCalls to qualify fields
+	- how to distinguish fields from other args for special fns?
+- :deferred field attr, for blobs and such - i.e., exclude from :*
+- prepared statements??
+- source/schema-level options
+	- no implicit joins 
+- be a bit smarter about using save! vs update/insert! when saving rels
+- dsl for rels?
+	- belongs-to, has-one, has-many
+- subquery in :from? https://gist.github.com/3984333
 - allow ad-hoc entities in join, include, etc
 	- must add them to qenv
-- custom :on rel clause
-- java logging
-	- trace logging
+- marshal values in :where according to field types
+	- pair up values with fields? impossible to do generically? good enough?
 - ::query-cache ds key?
-- inner join when implicit joins in :where
-- per ds/dm hooks - after-query, before-save
 - rel reversal fn
-- derived fields - fn of one or more other paths
 - have expand-query return all final paths, so it matches query results?
 - move hooks into data source?
 - auto-add two-hop reverse rels? e.g., film -> actor
@@ -30,8 +37,6 @@
 - batched query; leverage limit/offset
 - field aliasing? doc support or lack thereof
 - :readonly entity key?
-- traverse into SqlCalls to qualify fields
-	- how to distinguish fields from other args for special fns?
 - fn handlers (some are engine specific)
 	- "interval 30 day" etc
 	- cast
@@ -47,8 +52,3 @@
 - handle certain DB data types better
 	- mysql set/enum, psql enum -- can't represent as keywords; special enum wrapper type?
 - data source protocols? pure clojure data source??
-- :deferred field attr, for blobs and such - i.e., exclude from :*
-- prepared statements??
-- source/schema-level options
-	- no implicit joins 
-- be a bit smarter about using save! vs update/insert! when saving rels

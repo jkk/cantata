@@ -2,7 +2,7 @@
 
 ### Cantata
 
-Melodic SQL for Clojure. Highlights:
+Melodic SQL for Clojure:
 
 * Relationship-aware querying and saving
 * Legacy-friendly: custom name mappings, composite primary keys
