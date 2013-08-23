@@ -373,6 +373,11 @@
   ([dm ename xname]
     (resolve (entity dm ename) xname)))
 
+(defn ^:private resolve-shortcut [path shortcuts]
+  (if (contains? shortcuts path)
+    (resolve-shortcut (shortcuts path) shortcuts)
+    path))
+
 (defn resolve-path
   "Resolve a qualified or unqualified keyword path relative to an entity. If
   :lax is true, pretends unresolved path tips refer to entity fields. Returns
@@ -392,7 +397,7 @@
                 (not= :shortcut (:type resolved)))
          (let [final-path (let [joined-seen-path (apply cu/join-path
                                                         (conj seen-path rname))]
-                            (or (shortcuts joined-seen-path)
+                            (or (resolve-shortcut joined-seen-path shortcuts)
                                 joined-seen-path))]
            (if (= :rel (:type resolved))
              (let [rel (:value resolved)
@@ -428,7 +433,8 @@
                       ent* (entity dm ename*)
                       seen-path* (conj seen-path rname)
                       [seen-path* joined-seen-path] (let [joined-seen-path (apply cu/join-path seen-path*)]
-                                                      (if-let [sc (shortcuts joined-seen-path)]
+                                                      (if-let [sc (resolve-shortcut
+                                                                    joined-seen-path shortcuts)]
                                                         [(cu/split-path sc) sc]
                                                         [seen-path* joined-seen-path]))
                       link (r/->ChainLink
