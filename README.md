@@ -261,8 +261,8 @@ a map with only the `:name` key set. The following map keys are accepted:
           :key - name of foreign key field; default: rel name + "-id" suffix
     :other-key - name of referenced key on related entity; default: primary
                  key of related entity
-      :reverse - boolean indicating whether the foreign key is on this or
-                 the other table
+      :reverse - boolean indicating that the foreign key column is on the other
+                 table; default: false
           :one - boolean indicating whether the relationship is one-to-one;
                  default: false for reverse rels, true otherwise
 
