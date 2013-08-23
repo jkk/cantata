@@ -1,4 +1,4 @@
-(defproject cantata "0.1.0-SNAPSHOT"
+(defproject cantata "0.1.0"
   :description "Database abstraction library"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
