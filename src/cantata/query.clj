@@ -1045,7 +1045,7 @@
         pk (:pk ent)
         all-fields (filter #(= :field (-> % env :resolved :type))
                            (keys env))
-        has-many? (comp #(some (comp :reverse :rel) %) :chain env)
+        has-many? (comp #(some (comp not :one :rel) %) :chain env)
         any-many? (boolean (seq (filter has-many? all-fields)))
         [many-fields one-fields] ((juxt filter remove)
                                   has-many?
