@@ -825,6 +825,13 @@
              (and (-> l1 :rel :reverse)
                   (not (-> l2 :rel :reverse)))))))
 
+(defn ^:private normalize-rel-map [ent m]
+  (if (map? m)
+    m
+    (if (vector? m)
+      (zipmap (:pk ent) m)
+      {(:pk ent) m})))
+
 (defn ^:private get-rel-maps [dm ent m]
   (let [rels (cdm/rels ent)]
     (reduce-kv
@@ -837,7 +844,10 @@
               (throw-info
                 ["Rel" k "not allowed here - saving entity" (:name ent)]
                 {:rname k :ename (:name ent)})
-              (assoc rms (mapv :rel chain) (cu/seqify v))))))
+              (let [rent (:to (peek chain))]
+                (assoc rms (mapv :rel chain)
+                       (map #(normalize-rel-map rent %)
+                            (cu/seqify v))))))))
       {} m)))
 
 (defn ^:private save-m-rels [ds dm ent own-m m & opts]
@@ -861,7 +871,10 @@
   if no primary key is provided, a new record will be inserted.
 
   The map may include nested, related maps, which will in turn be saved and
-  associated with the top-level record. All saves happen within a transaction.
+  associated with the top-level record. Nested rel values may also be bare
+  primary key values instead of maps.
+
+  All changes happen within a transaction.
 
   Values will be marshalled before being sent to the database. Joda dates,
   for example, will be converted to java.sql dates.
