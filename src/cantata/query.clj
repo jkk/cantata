@@ -645,6 +645,10 @@
         (let [rp (apply resolve-path dm ent env path opts)]
           (r/->ResolvedPath alias ent (:chain rp) (:resolved rp) (:shortcuts rp)))))
     (env-get env path 0)
+    (when (instance? SqlCall path)
+      (r/->ResolvedPath path ent [] (r/->Resolved :call path) nil))
+    (when (instance? SqlRaw path)
+      (r/->ResolvedPath path ent [] (r/->Resolved :raw path) nil))
     (resolve-joined-field env path)
     (when (vector? env)
       (resolve-free-path dm env path))

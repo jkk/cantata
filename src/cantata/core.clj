@@ -8,6 +8,7 @@
             [cantata.query :as cq]
             [cantata.sql :as sql]
             [cantata.parse :as cpa]
+            [honeysql.core :as hsql]
             [clojure.java.jdbc :as jd]
             [flatland.ordered.map :as om]))
 
@@ -923,3 +924,16 @@
                          (assoc-pk {} (:key dep-rel) id-to-keep)
                          (cq/build-key-pred dep-pk dep-id))))))))
     (delete-ids! ds ename id-to-merge)))
+
+;;;;
+
+(defn raw
+  "Returns a raw SQL string fragment. Using this in queries could cause
+  strange behavior."
+  [s]
+  (hsql/raw s))
+
+(defn call
+  "Returns a SQL call for embedding in queries; fn-name should be a keyword"
+  [fn-name & args]
+  (apply hsql/call fn-name args))

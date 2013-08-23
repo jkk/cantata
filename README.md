@@ -547,6 +547,14 @@ query.
 => ["SELECT \"actor\".\"id\" AS \"actor.id\", \"actor\".\"name\" AS \"actor.name\" FROM \"PUBLIC\".\"film\" AS \"film\" LEFT JOIN \"PUBLIC\".\"film_actor\" AS \"film_actor\" ON \"film\".\"id\" = \"film_actor\".\"film_id\" LEFT JOIN \"PUBLIC\".\"actor\" AS \"actor\" ON \"film_actor\".\"actor_id\" = \"actor\".\"id\""]
 ```
 
+### `call [fn-name & args]`
+
+Returns a SQL call object for use in queries. Prefer the `:%count.id` syntax for aggregates.
+
+### `raw [s]`
+
+Returns a raw SQL string fragment. Using this in queries could cause strange behavior.
+
 ### Manipulation Functions
 
 * `save! [ds ename values & opts]`
