@@ -17,7 +17,7 @@ Melodic SQL for Clojure:
 Leiningen coordinate:
 
 ```clj
-[cantata "0.1.0"]
+[cantata "0.1.1"]
 ```
 
 ## Crash Course
