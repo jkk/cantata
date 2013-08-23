@@ -1,4 +1,6 @@
 (ns cantata.parse
+  "Functions for transforming values that flow into and out of databases
+  and other external sources"
   (:require [cantata.protocols :as cp]
             [cantata.util :refer [throw-info]]
             [flatland.ordered.map :as om]))

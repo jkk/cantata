@@ -1,4 +1,5 @@
 (ns cantata.util
+  "Generic utility functions"
   (:require [clojure.string :as string]
             [flatland.ordered.map :as om]))
 

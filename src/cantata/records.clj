@@ -1,4 +1,5 @@
-(ns cantata.records)
+(ns cantata.records
+  "Records used in Cantata implementation")
 
 (defrecord Field [name type db-name db-type])
 (defrecord Rel [name ename key other-key reverse one])

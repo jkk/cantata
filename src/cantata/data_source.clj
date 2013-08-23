@@ -1,4 +1,7 @@
 (ns cantata.data-source
+  "Implementation of data source related features
+
+  See cantata.core for the main API entry point"
   (:require [cantata.data-model :as cdm]
             [cantata.util :refer [throw-info]]
             [cantata.protocols :as cp]
@@ -12,7 +15,10 @@
   (second (re-find #"^([^:]+):"
                    (string/replace url #"^jdbc:" ""))))
 
-(defn normalize-db-spec [db-spec]
+(defn normalize-db-spec
+  "Takes a map, string, or URI and returns a clojure.java.jdbc-compatible
+  db spec with :subprotocol set, amongst other keys provided"
+  [db-spec]
   (cond
     (map? db-spec) db-spec
     (string? db-spec) {:subprotocol (get-url-subprotocol db-spec)
@@ -31,7 +37,9 @@
    "sqlserver" :sqlserver
    "jtds:sqlserver" :sqlserver})
 
-(defn get-subprotocol [db-spec]
+(defn get-subprotocol
+  "Returns the subprotocol of a clojure.java.jdbc-compatible db spec"
+  [db-spec]
   (or (:subprotocol db-spec)
       (when-let [url (:connection-uri db-spec)]
         (get-url-subprotocol url))
@@ -40,12 +48,17 @@
           (get-url-subprotocol
             (.getJdbcUrl ^ComboPooledDataSource ds))))))
 
-(defn detect-quoting [db-spec]
+(defn detect-quoting
+  "Guesses the quoting style of the given db spec"
+  [db-spec]
   (when-let [subprot (get-subprotocol db-spec)]
     (subprotocol->quoting subprot)))
 
 ;; TODO: more customizable options
-(defn create-pool [spec]
+(defn create-pool
+  "Creates a connection pool and returns a clojure.java.jdbc-compatble db spec
+  for it"
+  [spec]
   (let [cpds (doto (ComboPooledDataSource.)
                (.setDriverClass (:classname spec))
                (.setJdbcUrl (str "jdbc:" (:subprotocol spec) ":" (:subname spec)))
@@ -72,7 +85,9 @@
                        f))]
     (apply comp fs)))
 
-(defn data-source [db-spec & model+opts]
+(defn data-source
+  "Implementation of cantata.core/data-source; see that function for docs"
+  [db-spec & model+opts]
   (let [arg1 (first model+opts)
         [dm opts] (if (keyword? arg1)
                     [nil model+opts]

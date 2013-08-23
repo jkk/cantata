@@ -1,4 +1,8 @@
 (ns cantata.sql
+  "Functions for interacting with a JDBC/SQL data source and readying queries
+  for execution
+
+  See cantata.core for the main API entry point"
   (:require [cantata.data-source :as cds]
             [cantata.data-model :as cdm]
             [cantata.query :as cq]
@@ -14,6 +18,7 @@
 (set! *warn-on-reflection* true)
 
 (defn identifier
+  "Turns an optionally-qualified string or keyword into a quoted identifier"
   ([x quoting]
     (hq/raw (hq/quote-identifier x :style quoting :split false)))
   ([x y quoting]
@@ -23,8 +28,12 @@
                    "."
                    (hq/quote-identifier y :style quoting :split false))))))
 
-(defmulti qualify (fn [x quoting]
-                    (-> x :resolved :type)))
+(defmulti qualify
+  "Transforms a ResolvedPath or other object into a fully-qualified, quoted
+  identifier or other SQL value, taking into account entity and field name
+  mappings"
+  (fn [x quoting]
+    (-> x :resolved :type)))
 
 (defmethod qualify :default [x quoting]
   x)
@@ -71,6 +80,8 @@
 (def ^:dynamic *subquery-depth* -1)
 
 (defmulti qualify-clause
+  "Qualifies and quotes all identifiers in a query clause, taking into account
+  entity and field name mappings"
   (fn [clause clause-val quoting env]
     clause))
 
@@ -159,6 +170,8 @@
 
 ;; TODO: traverse into SqlCalls?
 (defn qualify-query
+  "Qualifies and quotes all identifiers in a query, taking into account entity
+  and field name mappings"
   ([q]
     (qualify-query q nil))
   ([q quoting]
@@ -175,12 +188,18 @@
               q)))
         q q))))
 
-(defn plain-sql? [q]
+(defn plain-sql?
+  "Returns true if q is a plain SQL string or clojure.java.jdbc-style
+  [sql params] vector"
+  [q]
   (or (string? q)
       (and (vector? q) (string? (first q)))
       (and (sequential? q) (string? (first q)))))
 
-(defn to-sql [q & {:keys [data-model quoting expanded env params]}]
+(defn to-sql
+  "Transforms a Cantata query into a clojure.java.jdbc-compatible [sql params]
+  vector, leveraging the provided data model and other information"
+  [q & {:keys [data-model quoting expanded env params]}]
   (cond
    (string? q) [q]
    (and (vector? q) (string? (first q))) q
@@ -193,12 +212,16 @@
                       :quoting quoting
                       :params params))))
 
-(defn prepared? [q]
+(defn prepared?
+  "Returns true if q is a PreparedQuery instance"
+  [q]
   (instance? PreparedQuery q))
 
 ;; TODO: prepared statements; need a way to manage open/close scope;
 ;; maybe piggyback on transaction scope?
-(defn prepare [ds dm q & {:keys [expanded env force-pk] :as opts}]
+(defn prepare
+  "See cantata.core/prepare-query"
+  [ds dm q & {:keys [expanded env force-pk] :as opts}]
   (let [[eq env added-paths] (if (or expanded (plain-sql? q))
                                [q env]
                                (cq/expand-query dm q :force-pk (not (false? force-pk))))
@@ -229,7 +252,9 @@
               ds-unmarshal))
       ds-unmarshal)))
 
-(defn query [ds dm q callback & {:keys [expanded env params force-pk]}]
+(defn query
+  "Implementation of cantata.core/query"
+  [ds dm q callback & {:keys [expanded env params force-pk]}]
   (let [prepped? (prepared? q)
         [eq env added-paths] (cond
                                prepped? [(:expanded-query q) (:env q) (:added-paths q)]
@@ -259,7 +284,9 @@
     (callback (with-meta cols qmeta)
               rows)))
 
-(defn query-count [ds dm q & {:keys [flat] :as opts}]
+(defn query-count
+  "Implementation of cantata.core/query-count"
+  [ds dm q & {:keys [flat] :as opts}]
   (when (plain-sql? q)
     (throw-info "query-count not supported on plain SQL" {:q q}))
   (let [quoting (cds/get-quoting ds)
@@ -282,7 +309,10 @@
            :env env
            (apply concat opts))))
 
-(defn add-limit-1 [q]
+(defn add-limit-1
+  "Adds a \"limit 1\" clause to query q, which can be a Cantata query or plain
+  SQL string"
+  [q]
   (if (prepared? q)
     q
     (let [q (if (or (map? q) (string? q)) [q] q)
@@ -314,6 +344,7 @@
                 v)])))
 
 (defn insert!
+  "Implementation of canata.core/insert!"
   [ds dm ename maps & {:as opts}]
   (let [ent (cdm/entity dm ename)
         fnames (cdm/field-names ent)
@@ -339,6 +370,7 @@
       (map #(get-return-key ent %) ret))))
 
 (defn update!
+  "Implementation of canata.core/update!"
   [ds dm ename values pred & {:as opts}]
   (let [ent (cdm/entity dm ename)
         fnames (cdm/field-names ent)
@@ -359,6 +391,7 @@
       (jd/update! ds table values* pred*))))
 
 (defn delete!
+  "Implementation of canata.core/delete!"
   ([ds dm ename]
     (delete! ds dm ename nil))
   ([ds dm ename pred & {:as opts}]

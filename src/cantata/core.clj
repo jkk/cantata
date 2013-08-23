@@ -1,5 +1,6 @@
 (ns cantata.core
-  "Primary public namespace - data source setup, querying, manipulation"
+  "Primary public namespace - data source and data model setup, querying,
+  manipulation"
   (:require [cantata.util :as cu :refer [throw-info]]
             [cantata.data-model :as cdm]
             [cantata.data-source :as cds]

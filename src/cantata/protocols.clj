@@ -1,4 +1,5 @@
 (ns cantata.protocols
+  "Protocols and implementations for data type parsing and marshalling"
   (:require [clojure.instant :as instant])
   (:import org.joda.time.DateTimeZone
            org.joda.time.LocalDate

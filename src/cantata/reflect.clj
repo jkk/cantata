@@ -1,4 +1,5 @@
 (ns cantata.reflect
+  "Tools for examining a the structural components of a data source"
   (:require [cantata.util :as cu]
             [clojure.java.jdbc :as jd]
             [clojure.string :as string])
@@ -7,13 +8,20 @@
 
 (set! *warn-on-reflection* true)
 
-(defn guess-db-name [ename]
+(defn guess-db-name
+  "Given an entity name, tries to guess the table name"
+  [ename]
   (string/replace (name ename) "-" "_"))
 
-(defn guess-rel-key [rname]
+(defn guess-rel-key
+  "Given a rel name, tries to guess the name of the foreign key"
+  [rname]
   (keyword (str (name (cu/last-part rname)) "-id")))
 
-(defn identifier [x & [prefix]]
+(defn identifier
+  "Transforms a name from database lingo into a nice, lower-case Clojure
+  keyword with dashes"
+  [x & [prefix]]
   (let [x (if prefix
             (string/replace-first x prefix "")
             x)]
@@ -30,19 +38,24 @@
 (defn ^:private ^DatabaseMetaData get-db-meta [ds]
   (.getMetaData ^Connection (:connection ds)))
 
-(defn reflect-catalogs [ds]
+(defn reflect-catalogs
+  "Returns information about catalog in a data source"
+  [ds]
   (jd/db-transaction
     [ds ds]
     (get-results
       (.getCatalogs (get-db-meta ds)))))
 
-(defn reflect-tables [ds]
+(defn reflect-tables
+  "Returns information about tables in a data source"
+  [ds]
   (jd/db-transaction
     [ds ds]
     (get-results
       (.getTables (get-db-meta ds) nil nil nil nil))))
 
 (defn reflect-columns
+  "Returns information about columns in a table and/or data source"
   ([ds]
     (reflect-columns ds nil))
   ([ds table]
@@ -52,6 +65,7 @@
         (.getColumns (get-db-meta ds) nil nil table nil)))))
 
 (defn reflect-foreign-keys
+  "Returns information about foreign keys in a table and/or data source"
   ([ds]
     (reflect-foreign-keys ds nil))
   ([ds table]
@@ -61,6 +75,7 @@
         (.getImportedKeys (get-db-meta ds) nil nil table)))))
 
 (defn reflect-primary-keys
+  "Returns information about primary keys in a table and/or data source"
   ([ds]
     (reflect-primary-keys ds nil))
   ([ds table]
@@ -94,7 +109,9 @@
 
 ;;;;
 
-(defn reflect-entities [ds & {:keys [table-prefix]}]
+(defn reflect-entities
+  "Returns entity specs for all tables found in a data source"
+  [ds & {:keys [table-prefix]}]
   (when cu/*verbose*
     (println "Reflecting for entities"))
   (doall
@@ -106,7 +123,9 @@
          :db-schema (:table-schem tmeta)
          :db-name tname}))))
 
-(defn reflect-fields [ds table & {:keys [column-prefix]}]
+(defn reflect-fields
+  "Returns field specs for all columns found in a data source table"
+  [ds table & {:keys [column-prefix]}]
   (when cu/*verbose*
     (println "Reflecting for" table "fields"))
   (doall
@@ -120,7 +139,9 @@
          :db-type db-type
          :type (db-type->type db-type)}))))
 
-(defn reflect-rels [ds table & {:keys [column-prefix]}]
+(defn reflect-rels
+  "Returns rel specs based on foreign keys found in a data source table"
+  [ds table & {:keys [column-prefix]}]
   (when cu/*verbose*
     (println "Reflecting for" table "rels"))
   (doall
@@ -132,7 +153,9 @@
          :key (identifier (:fkcolumn-name imeta) column-prefix)
          :other-key (identifier (:pkcolumn-name imeta) column-prefix)}))))
 
-(defn reflect-pk [ds table & {:keys [column-prefix]}]
+(defn reflect-pk
+  "Returns the primary key name for a table found in a data source"
+  [ds table & {:keys [column-prefix]}]
   (when cu/*verbose*
     (println "Reflecting for" table "PK"))
   (let [imetas (reflect-primary-keys ds table)

@@ -1,4 +1,5 @@
 (ns cantata.io
+  "Functions for getting data into and out of Cantata"
   (:require [cantata.data-source :as cds]
             [cantata.data-model :as cdm]
             [cantata.util :as cu :refer [throw-info]]
