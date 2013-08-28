@@ -119,7 +119,28 @@ You can tell Cantata to fetch data from related tables in multiple database roun
 
 Both fetching strategies -- single vs. multiple round trips -- have benefits and costs. Cantata lets you choose.
 
-You can also perform explicit joins if you wish.
+Joins can be made explicit, which overrides implicit joins of the same name:
+
+```clj
+;; No nesting
+(c/query
+  ds [:from :film
+      :select [:title :actor.name]
+      :where [:= 1 :id]
+      :join [[:film-actor :fa] [:= :id :fa.film-id]
+             :actor [:= :fa.actor-id :actor.id]]]
+  :flat true)
+=> ({:title "ACADEMY DINOSAUR" :actor.name "PENELOPE GUINESS"}
+    {:title "ACADEMY DINOSAUR" :actor.name "CHRISTIAN GABLE"}
+    {:title "ACADEMY DINOSAUR" :actor.name "LUCILLE TRACY"}
+    …)
+```
+
+If needed, you can drop down to plain SQL:
+
+```clj
+(c/query ds "select id, title from film limit 3")
+```
 
 ### Query DSL
 
@@ -144,12 +165,12 @@ Helper functions always return a vector query (which query functions will accept
              (select :title :release-year :length)
              (un-select :length)
              (where {:rating "R"})
-             (where :or [:< 10 :%count.actor.id] [:language.name "French"])))
+             (where :or [:< 10 :%count.actor.id] [:= :language.name "French"])))
 => {:from :film
     :select (:title :release-year),
     :where [:and
             [:= :rating "R"]
-            [:or [:< 10 :%count.actor.id] [:language.name "French"]]]}
+            [:or [:< 10 :%count.actor.id] [:= :language.name "French"]]]}
 ```
 
 The helper functions are by no means required; use them or not according to your taste.
@@ -198,6 +219,13 @@ Custom types can be defined by implementing Cantata multimethods and protocols.
 ### State
 
 You can use multiple data sources or data models simultaneously, in different configurations. They will not step on each other because Cantata has no global state. Any state Cantata does have is confined to the data source (database connection, pool, etc.). Data models are immutable.
+
+### Drawbacks
+
+* Query expansion overhead - see `prepare-query` for a way to mitigate this
+* Query result processing overhead - not too bad, but there's room for improvement
+* Executed SQL may not always be optimal
+* Some queries may be awkward or impossible to express in the Cantata query format
 
 ## Playground Project
 
