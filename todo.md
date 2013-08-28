@@ -1,3 +1,6 @@
+- move all hooks to data-source atom
+	- add-hook!
+	- hooks in dm spec just a shortcut
 - per ds/dm hooks - after-query, before-save
 - java logging
 	- trace logging
