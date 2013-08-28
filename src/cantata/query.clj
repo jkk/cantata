@@ -548,7 +548,7 @@
             (for [[to on] (partition 2 joins)
                   :let [[ename alias] (if (vector? to)
                                         to
-                                        [(first to) (first to)])
+                                        [to to])
                         ename (if (map? ename)
                                 (:from ename)
                                 ename)]
@@ -572,17 +572,22 @@
                               (fn [i el]
                                 (if (odd? i)
                                   el
-                                  (let [el1 (first el)]
-                                    (if (and (map? el1)
-                                             (not (dm/entity? el1)))
-                                      [(expand-subquery dm el1 env)
-                                       (second el)]
+                                  (let [[t alias] (if (vector? el)
+                                                    el
+                                                    [el el])]
+                                    (if (and (map? t)
+                                             (not (dm/entity? t)))
+                                      [(expand-subquery dm t env)
+                                       alias]
                                       el))))
                               (clause q))))
           joins (get-join-clauses q)
           alias-jenv (for [[to on] (partition 2 joins)
-                           :when (map? (first to))]
-                       [(second to) (::env (meta (first to)))])
+                           :let [[t alias] (if (vector? to)
+                                             to
+                                             [to to])]
+                           :when (map? t)]
+                       [alias (::env (meta t))])
           env (reduce
                 (fn [env [jpath jrp]]
                   (env-assoc env jpath jrp))
