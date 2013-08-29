@@ -77,8 +77,6 @@
 (defmethod qualify :param [x quoting]
   (-> x :resolved :value))
 
-(def ^:dynamic *subquery-depth* -1)
-
 (defmulti qualify-clause
   "Qualifies and quotes all identifiers in a query clause, taking into account
   entity and field name mappings"
@@ -177,16 +175,15 @@
   ([q quoting]
     (qualify-query q quoting {}))
   ([q quoting env]
-    (binding [*subquery-depth* (inc *subquery-depth*)]
-      (reduce-kv
-        (fn [q clause cval]
-          (let [cval* (qualify-clause clause cval quoting env)]
-            (if (and (not (nil? cval))
-                     (or (not (coll? cval*))
-                         (seq cval*)))
-              (assoc q clause cval*)
-              q)))
-        q q))))
+    (reduce-kv
+      (fn [q clause cval]
+        (let [cval* (qualify-clause clause cval quoting env)]
+          (if (and (not (nil? cval))
+                   (or (not (coll? cval*))
+                       (seq cval*)))
+            (assoc q clause cval*)
+            q)))
+      q q)))
 
 (defn plain-sql?
   "Returns true if q is a plain SQL string or clojure.java.jdbc-style
