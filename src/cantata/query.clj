@@ -882,14 +882,14 @@
 
 (defn build-result-map
   "Given field names and values, returns a map that represents a single
-  query result. If the :unordered-maps key of opts is true, returns an
-  unordered map, otherwise an ordered one."
+  query result. If the :ordered-maps key of opts is true, returns an
+  ordered map, otherwise an ordered one."
   ([fnames fvals]
     (build-result-map fnames fvals nil))
   ([fnames fvals opts]
-    (if (:unordered-maps opts)
-      (zipmap fnames fvals)
-      (cu/zip-ordered-map fnames fvals))))
+    (if (:ordered-maps opts)
+      (cu/zip-ordered-map fnames fvals)
+      (zipmap fnames fvals))))
 
 (defn ^:private nest-group
   [cols rows col->idx col->info all-path-parts opts path-parts pk-cols]

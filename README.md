@@ -332,7 +332,7 @@ Keyword options (all default to false unless otherwise noted):
            :clob-str - convert all CLOB values returned by queries to strings
          :blob-bytes - convert all BLOB values returned by queries to byte
                        arrays
-     :unordered-maps - return unordered hash maps for all queries
+       :ordered-maps - return ordered hash maps for all queries
        :table-prefix - optional table prefix to remove from reflected table names
       :column-prefix - optional column prefix to remove from reflected column
                        names
