@@ -1,3 +1,9 @@
+- multiple data source types?
+	- jdbc, pure clojure, datomic(??)
+- user guide
+	- rel loading: http://docs.sqlalchemy.org/en/latest/orm/loading.html
+- subquery rel loading strategy?
+- allow data source to be a function
 - move all hooks to data-source atom
 	- add-hook!
 	- hooks in dm spec just a shortcut
@@ -36,7 +42,9 @@
 - have expand-query return all final paths, so it matches query results?
 - move hooks into data source?
 - auto-add two-hop reverse rels? e.g., film -> actor
-- lein-cantata plugin; auto gen model from db
+- lein-cantata plugin
+	- auto gen & output model from db
+	- generate graph image with rhizome
 - batched query; leverage limit/offset
 - field aliasing? doc support or lack thereof
 - :readonly entity key?
@@ -55,3 +63,4 @@
 - handle certain DB data types better
 	- mysql set/enum, psql enum -- can't represent as keywords; special enum wrapper type?
 - data source protocols? pure clojure data source??
+- see htsql for possible future extensions: http://htsql.org/doc/overview.html#in-sql-modest-complexity-is-painful

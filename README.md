@@ -5,8 +5,8 @@
 Melodic SQL for Clojure:
 
 * Relationship-aware querying and saving
-* Legacy-friendly: custom name mappings, composite primary keys
 * Pure-data queries
+* Legacy-friendly: custom name mappings, composite primary keys
 * No implicit global state
 * Extensibile
 
@@ -14,7 +14,7 @@ Melodic SQL for Clojure:
 
 ## Installation
 
-Leiningen coordinate:
+Use [Leiningen](http://leiningen.org/) and add this to your project's dependencies:
 
 ```clj
 [cantata "0.1.3"]
