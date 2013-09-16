@@ -80,8 +80,8 @@
   Shortcuts take the form of a map of shortcut path to target path. Target
   paths can point to rels or fields.
 
-  Hooks take form of hook name to hook function. Available hooks and their
-  corresponding arguments and expected return values:
+  Hooks take form of a map from hook name to hook function. Available hooks and
+  their corresponding arguments and expected return values:
 
     :before-query  [ent expanded-q env added-paths] -> [expanded-q env added-paths]
     :after-query   [ent results] -> results
@@ -129,6 +129,8 @@
            :quoting - identifier quoting style to use; auto-detects if
                       left unspecified; set to nil to turn off quoting (this
                       will break many queries); :ansi, :mysql, or :sqlserver
+             :hooks - data source-wide hooks; see `make-data-model` for
+                      available hooks and format
           :max-idle - max pool idle time in seconds; default 30 mins
    :max-idle-excess - max pool idle time for excess connections, in seconds;
                       default 3 hours
@@ -240,7 +242,7 @@
                               (first ret)
                               ret))]
       (if-let [from-ent (:from qmeta)]
-        (cdm/maybe-invoke-hook ret from-ent :after-query ret)
+        (cds/maybe-invoke-hook ret ds from-ent :after-query ret)
         ret))))
 
 (defmacro with-query-rows
@@ -561,7 +563,7 @@
 
 (def-dm-helpers ;being lazy
   entities entity rels rel fields field field-names shortcut shortcuts
-  validate! resolve-path)
+  resolve-path)
 
 (defn data-model
   "Return the DataModel record bundled within a data source"
@@ -593,6 +595,20 @@
           joda-dates? (cds/get-option ds :joda-dates)]
       (cpa/parse ent fnames values :joda-dates joda-dates?))))
 
+(defn validate!
+  "Invoke the :validate hook on the entity, passing it the given map of values.
+  If validation fails (i.e., the validation function returns problem maps),
+  throws an ExceptionInfo instance with the :problems and :values keys set."
+  [ds ename-or-ent m]
+   (let [ent (if (keyword? ename-or-ent)
+               (cdm/entity (cds/get-data-model ds) ename-or-ent)
+               ename-or-ent)]
+     (let [problems (cds/maybe-invoke-hook nil ds ent :validate m)]
+       (when (and problems (not (and (sequential? problems)
+                                     (empty? problems))))
+         (throw-info ["Validation failed for entity" (:name ent)]
+                     {:problems (cu/seqify problems) :values m})))))
+
 (defn problem
   "Creates and returns a problem map with optional keys and msg. Validation
   functions can use this to describe validation problems."
@@ -615,12 +631,12 @@
       (select-keys m (cdm/field-names ent))
       (select-keys m (remove cu/first-qualifier (keys m))))))
 
-(defn ^:private prep-map [ent m validate?]
+(defn ^:private prep-map [ds ent m validate?]
   (let [m (->> m
             (get-own-map ent)
             (cpa/marshal ent))]
     (when-not (false? validate?)
-      (cdm/validate! ent m))
+      (validate! ds ent m))
     m))
 
 (defn insert!
@@ -642,13 +658,13 @@
         ent (or (cdm/entity dm ename)
                 (throw-info ["Unrecognized entity" ename]
                             {:ename ename}))
-        ms* (map #(prep-map ent % validate) ms)
-        ms* (cdm/maybe-invoke-hook ms* ent :before-insert ms*)]
+        ms* (map #(prep-map ds ent % validate) ms)
+        ms* (cds/maybe-invoke-hook ms* ds ent :before-insert ms*)]
     (let [ret-keys (sql/insert! (force ds) dm ename ms* :return-keys return-keys)
           ret (if (sequential? m-or-ms)
                 ret-keys
                 (first ret-keys))]
-      (cdm/maybe-invoke-hook ret ent :after-insert ms* ret))))
+      (cds/maybe-invoke-hook ret ds ent :after-insert ms* ret))))
 
 (defn update!
   "Updates data source records that match the given predicate with the given
@@ -662,11 +678,12 @@
         ent (or (cdm/entity dm ename)
                 (throw-info ["Unrecognized entity" ename]
                             {:ename ename}))
-        values* (prep-map ent values validate)
-        [values* pred] (cdm/maybe-invoke-hook
-                         [values* pred] ent :before-update values* pred)]
+        values* (prep-map ds ent values validate)
+        [values* pred] (cds/maybe-invoke-hook
+                         [values* pred]
+                         ds ent :before-update values* pred)]
     (let [ret (sql/update! (force ds) dm ename values* pred)]
-      (cdm/maybe-invoke-hook ret ent :after-update values* pred ret))))
+      (cds/maybe-invoke-hook ret ds ent :after-update values* pred ret))))
 
 (defn delete!
   "Deletes records from data source that match the given predicate, or all
@@ -680,9 +697,9 @@
           ent (or (cdm/entity dm ename)
                   (throw-info ["Unrecognized entity" ename]
                               {:ename ename}))
-          pred (cdm/maybe-invoke-hook pred ent :before-delete pred)]
+          pred (cds/maybe-invoke-hook pred ds ent :before-delete pred)]
       (let [ret (sql/delete! (force ds) dm ename pred)]
-        (cdm/maybe-invoke-hook ret ent :after-delete pred ret)))))
+        (cds/maybe-invoke-hook ret ds ent :after-delete pred ret)))))
 
 (defn cascading-delete!
   "Deletes ALL database records for an entity, and ALL dependent records. Or,
@@ -905,13 +922,13 @@
         ent (or (cdm/entity dm ename)
                 (throw-info ["Unrecognized entity" ename]
                             {:ename ename}))
-        values (cdm/maybe-invoke-hook values ent :before-save values)
+        values (cds/maybe-invoke-hook values ds ent :before-save values)
         own-m (get-own-map ent values)]
     (let [ret (with-transaction ds
                 (if (false? save-rels)
                   (apply save-m ds ent own-m (apply concat opts))
                   (apply save-m-rels ds dm ent own-m values (apply concat opts))))]
-      (cdm/maybe-invoke-hook ret ent :after-save values ret))))
+      (cds/maybe-invoke-hook ret ds ent :after-save values ret))))
 
 ;;;;
 

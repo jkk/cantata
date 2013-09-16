@@ -103,6 +103,7 @@
                   ::quoting (if (contains? opts :quoting)
                               (:quoting opts)
                               (detect-quoting ds))
+                  ::hooks (:hooks opts)
                   ::marshaller (make-marshalling-fn opts marshal-fnmap)
                   ::unmarshaller (make-marshalling-fn opts unmarshal-fnmap))]
     (when-let [init (:init-fn opts)]
@@ -154,3 +155,45 @@
                              row
                              (assoc row i newv)))))))
     identity))
+
+(defmulti ^:private invoke-nested-hook (fn [hname hf ent ret args]
+                                         hname))
+
+(defmethod invoke-nested-hook :default [hname hf ent ret _]
+  (apply hf ent ret))
+
+(defmethod invoke-nested-hook :after-query [hname hf ent ret _]
+  (hf ent ret))
+
+(defmethod invoke-nested-hook :validate [hname hf ent ret args]
+  (concat ret (apply hf ent args)))
+
+(defmethod invoke-nested-hook :before-save [hname hf ent ret _]
+  (hf ent ret))
+
+(defmethod invoke-nested-hook :after-save [hname hf ent ret [map]]
+  (hf ent map ret))
+
+(defmethod invoke-nested-hook :before-insert [hname hf ent ret _]
+  (hf ent ret))
+
+(defmethod invoke-nested-hook :after-insert [hname hf ent ret [maps]]
+  (hf ent maps ret))
+
+(defmethod invoke-nested-hook :after-update [hname hf ent ret [map pred]]
+  (hf ent map pred ret))
+
+(defmethod invoke-nested-hook :before-delete [hname hf ent ret _]
+  (hf ent ret))
+
+(defmethod invoke-nested-hook :after-delete [hname hf ent ret [pred]]
+  (hf ent pred ret))
+
+(defn maybe-invoke-hook
+  [default ds ent hname & args]
+  (if-let [ds-hf (get-in (force ds) [::hooks hname])]
+    (let [ret (apply ds-hf ent args)]
+      (if-let [hf (cdm/hook ent hname)]
+        (invoke-nested-hook hname hf ent ret args)
+        ret))
+    (apply cdm/maybe-invoke-hook default ent hname args)))

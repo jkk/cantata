@@ -303,8 +303,8 @@ to ensure uniqueness, like so: `:_rel-name.entity-name`.
 Shortcuts take the form of a map of shortcut path to target path. Target
 paths can point to rels or fields.
 
-Hooks take form of hook name to hook function. Available hooks and their
-corresponding arguments and expected return values:
+Hooks take form of a map from hook name to hook function. Available hooks
+and their corresponding arguments and expected return values:
 
     :before-query  [ent expanded-q env added-paths] -> [expanded-q env added-paths]
     :after-query   [ent results] -> results
@@ -349,6 +349,8 @@ Keyword options (all default to false unless otherwise noted):
             :quoting - identifier quoting style to use; auto-detects if
                        left unspecified; set to nil to turn off quoting (this
                        will break many queries); :ansi, :mysql, or :sqlserver
+              :hooks - data source-wide hooks; see `make-data-model` for
+                       available hooks and format
            :max-idle - max pool idle time in seconds; default 30 mins
     :max-idle-excess - max pool idle time for excess connections, in seconds;
                        default 3 hours

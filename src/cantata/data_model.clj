@@ -351,19 +351,6 @@
     (apply hf ent args)
     default))
 
-(defn validate!
-  "Invoke the :validate hook on the entity, passing it the given map of values.
-  If validation fails (i.e., the validation function returns problem maps),
-  throws an ExceptionInfo instance with the :problems and :values keys set."
-  ([ent m]
-    (let [problems (invoke-hook ent :validate m)]
-      (when (and problems (not (and (sequential? problems)
-                                    (empty? problems))))
-        (throw-info ["Validation failed for entity" (:name ent)]
-                    {:problems (cu/seqify problems) :values m}))))
-  ([dm ename m]
-    (validate! (entity dm ename) m)))
-
 ;;;;
 
 (defn resolve

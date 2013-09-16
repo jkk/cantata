@@ -258,9 +258,9 @@
                                (or expanded (plain-sql? q)) [q env]
                                :else (cq/expand-query dm q :force-pk force-pk))
         from-ent (cdm/entity dm (:from eq))
-        [eq env added-paths] (cdm/maybe-invoke-hook
+        [eq env added-paths] (cds/maybe-invoke-hook
                                [eq env added-paths]
-                               from-ent :before-query eq env added-paths)
+                               ds from-ent :before-query eq env added-paths)
         [sql & sql-params] (if prepped?
                              (into [(:sql q)] (map #(get params %) (:param-names q)))
                              (to-sql eq
