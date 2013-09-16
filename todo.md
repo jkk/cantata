@@ -1,3 +1,7 @@
+- can't combine :with and :include when one is a subpath of the other
+	- have to handle each sucessive shortest path, regardless of clause?
+- prismatic's schema to validate records and other bits
+- after-query hooks - per row/map
 - multiple data source types?
 	- jdbc, pure clojure, datomic(??)
 - user guide
