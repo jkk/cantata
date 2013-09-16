@@ -309,9 +309,8 @@
     (apply cq/multi-query query-fn dm q opts*)))
 
 (defn query
-  "Executes query `q` against data source `ds` in a single round-trip.
-
-  The query can be one of the following:
+  "Executes query `q` against data source `ds`. The query can be one of the
+  following:
 
      * Query map/vector - see `build` for format
      * PreparedQuery record - see `prepare-query`

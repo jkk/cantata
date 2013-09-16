@@ -142,7 +142,7 @@
 
     {:rel-name [:foo :bar :baz]}
 
-  to select specific fields from related entities, rather than all fields."
+  to select specific fields from related entities."
   [q & incls]
   (conj (cu/vecify q) :include incls))
 
@@ -162,7 +162,7 @@
 
     {:rel-name [:foo :bar :baz]}
 
-  to select specific fields from related entities, rather than all fields."
+  to select specific fields from related entities."
   [q & withs]
   (conj (cu/vecify q) :with withs))
 

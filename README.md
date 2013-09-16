@@ -434,9 +434,7 @@ Bindable parameters are denoted with a leading ? - e.g., `:?actor-name`
 
 Arguments: `[ds q & opts]`
 
-Executes a query against data source in a single round-trip.
-
-The query can be one of the following:
+Executes a query against data source. The query can be one of the following:
 
 * Query map/vector - see above for format
 * PreparedQuery record - see `prepare-query`
@@ -487,7 +485,6 @@ Keyword options:
 Like `query` but returns only the first result. Does not limit the query
 in any way, so it's the responsbility of the caller to not query for more
 results than needed.
-```
 
 #### `query-count [ds q & opts]`
 
