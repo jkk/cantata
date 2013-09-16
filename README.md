@@ -83,7 +83,7 @@ The following query fetches the film with id 1, plus related language, category,
              {:name "LUCILLE TRACY", :id 20}]}]
 ```
 
-Queries are made of simple data, and can be amended on the fly:
+Queries are made of simple values, and can be amended on the fly:
 
 ```clj
 (def kid-film {:from :film
@@ -144,7 +144,7 @@ If needed, you can drop down to plain SQL:
 
 ### Query DSL
 
-Because queries are simple data, you can build them up yourself using the usual Clojure tools (see [Query Format](#query-format)). However, Cantata also provides helper functions in the `canata.dsl` namespace for building queries piecemeal:
+Because queries are made of values, you can build them up yourself using the usual Clojure tools (see [Query Format](#query-format)). However, Cantata also provides helper functions in the `canata.dsl` namespace for building queries piecemeal:
 
 ```clj
 (ns example.core
@@ -303,10 +303,20 @@ to ensure uniqueness, like so: `:_rel-name.entity-name`.
 Shortcuts take the form of a map of shortcut path to target path. Target
 paths can point to rels or fields.
 
-Hooks take form of a map from hook name to hook function. Available hooks:
+Hooks take form of hook name to hook function. Available hooks and their
+corresponding arguments and expected return values:
 
-    :validate :before-save :after-save :before-update :after-update
-    :before-delete :after-delete
+    :before-query  [ent expanded-q env added-paths] -> [expanded-q env added-paths]
+    :after-query   [ent results] -> results
+    :validate      [ent map] -> problems
+    :before-save   [ent map] -> map
+    :after-save    [ent map ret] -> ret
+    :before-insert [ent maps] -> maps
+    :after-insert  [ent maps ret] -> ret
+    :before-update [ent map pred] -> [map pred]
+    :after-update  [ent map pred ret] -> ret
+    :before-delete [ent pred] -> pred
+    :after-delete  [ent pred ret] -> ret
   
 ### Data Source
 

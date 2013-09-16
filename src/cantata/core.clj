@@ -80,10 +80,20 @@
   Shortcuts take the form of a map of shortcut path to target path. Target
   paths can point to rels or fields.
 
-  Hooks take form of hook name to hook function. Available hooks:
+  Hooks take form of hook name to hook function. Available hooks and their
+  corresponding arguments and expected return values:
 
-    :validate :before-save :after-save :before-update :after-update
-    :before-delete :after-delete"
+    :before-query  [ent expanded-q env added-paths] -> [expanded-q env added-paths]
+    :after-query   [ent results] -> results
+    :validate      [ent map] -> problems
+    :before-save   [ent map] -> map
+    :after-save    [ent map ret] -> ret
+    :before-insert [ent maps] -> maps
+    :after-insert  [ent maps ret] -> ret
+    :before-update [ent map pred] -> [map pred]
+    :after-update  [ent map pred ret] -> ret
+    :before-delete [ent pred] -> pred
+    :after-delete  [ent pred ret] -> ret"
   ([entity-specs]
     (make-data-model nil entity-specs))
   ([name entity-specs]
@@ -200,15 +210,38 @@
                           (first qargs)
                           qargs)))
 
+(defn query-meta
+  "Returns information about query results gathered before the query was
+  executed, if available. The returned map will have keys:
+
+           :from - entity queried
+            :env - map of resolved paths from the query
+       :expanded - expanded form of the query
+    :added-paths - paths added by Cantata to the query before executing it
+
+  Query meta data is normally attached to either the collection of maps
+  returned, or to the collection of column names returned."
+  ([results]
+    (::query (meta results)))
+  ([results k]
+    (k (::query (meta results)))))
+
 (defn with-query-rows*
   "Helper function for with-query-rows"
   ([ds q body-fn]
     (with-query-rows* ds q nil body-fn))
   ([ds q opts body-fn]
-    (apply sql/query (force ds) (cds/get-data-model ds) q body-fn
-           (if (map? opts)
-             (apply concat opts)
-             opts))))
+    (let [dm (cds/get-data-model ds)
+          ret (apply sql/query (force ds) dm q body-fn
+                     (if (map? opts)
+                       (apply concat opts)
+                       opts))
+          qmeta (query-meta (if (vector? (first ret))
+                              (first ret)
+                              ret))]
+      (if-let [from-ent (:from qmeta)]
+        (cdm/maybe-invoke-hook ret from-ent :after-query ret)
+        ret))))
 
 (defmacro with-query-rows
   "Evaluates body after executing a query against a data source and binding
@@ -237,22 +270,6 @@
   [maps ds q & body]
   `(with-query-maps* ~ds ~q (fn [~maps]
                               ~@body)))
-
-(defn query-meta
-  "Returns information about query results gathered before the query was
-  executed, if available. The returned map will have keys:
-
-           :from - entity queried
-            :env - map of resolved paths from the query
-       :expanded - expanded form of the query
-    :added-paths - paths added by Cantata to the query before executing it
-
-  Query meta data is normally attached to either the collection of maps
-  returned, or to the collection of column names returned."
-  ([results]
-    (::query (meta results)))
-  ([results k]
-    (k (::query (meta results)))))
 
 ;; TODO: public version that works on arbitrary vector/map data, sans meta data
 (defn ^:private nest
@@ -625,14 +642,13 @@
         ent (or (cdm/entity dm ename)
                 (throw-info ["Unrecognized entity" ename]
                             {:ename ename}))
-        ms* (map #(prep-map ent % validate) ms)]
-    (cdm/invoke-hook ent :before-insert ms*)
+        ms* (map #(prep-map ent % validate) ms)
+        ms* (cdm/maybe-invoke-hook ms* ent :before-insert ms*)]
     (let [ret-keys (sql/insert! (force ds) dm ename ms* :return-keys return-keys)
           ret (if (sequential? m-or-ms)
                 ret-keys
                 (first ret-keys))]
-      (cdm/invoke-hook ent :after-insert ms* ret)
-      ret)))
+      (cdm/maybe-invoke-hook ret ent :after-insert ms* ret))))
 
 (defn update!
   "Updates data source records that match the given predicate with the given
@@ -646,11 +662,11 @@
         ent (or (cdm/entity dm ename)
                 (throw-info ["Unrecognized entity" ename]
                             {:ename ename}))
-        values* (prep-map ent values validate)]
-    (cdm/invoke-hook ent :before-update values*)
+        values* (prep-map ent values validate)
+        [values* pred] (cdm/maybe-invoke-hook
+                         [values* pred] ent :before-update values* pred)]
     (let [ret (sql/update! (force ds) dm ename values* pred)]
-      (cdm/invoke-hook ent :after-update values* ret)
-      ret)))
+      (cdm/maybe-invoke-hook ret ent :after-update values* pred ret))))
 
 (defn delete!
   "Deletes records from data source that match the given predicate, or all
@@ -663,11 +679,10 @@
     (let [dm (cds/get-data-model ds)
           ent (or (cdm/entity dm ename)
                   (throw-info ["Unrecognized entity" ename]
-                              {:ename ename}))]
-      (cdm/invoke-hook ent :before-delete pred)
+                              {:ename ename}))
+          pred (cdm/maybe-invoke-hook pred ent :before-delete pred)]
       (let [ret (sql/delete! (force ds) dm ename pred)]
-        (cdm/invoke-hook ent :after-delete pred ret)
-        ret))))
+        (cdm/maybe-invoke-hook ret ent :after-delete pred ret)))))
 
 (defn cascading-delete!
   "Deletes ALL database records for an entity, and ALL dependent records. Or,
@@ -890,14 +905,13 @@
         ent (or (cdm/entity dm ename)
                 (throw-info ["Unrecognized entity" ename]
                             {:ename ename}))
+        values (cdm/maybe-invoke-hook values ent :before-save values)
         own-m (get-own-map ent values)]
-    (cdm/invoke-hook ent :before-save ename values)
     (let [ret (with-transaction ds
                 (if (false? save-rels)
                   (apply save-m ds ent own-m (apply concat opts))
                   (apply save-m-rels ds dm ent own-m values (apply concat opts))))]
-      (cdm/invoke-hook ent :after-save values ret)
-      ret)))
+      (cdm/maybe-invoke-hook ret ent :after-save values ret))))
 
 ;;;;
 

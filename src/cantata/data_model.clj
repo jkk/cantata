@@ -339,9 +339,17 @@
 ;;;;
 
 (defn invoke-hook
+  "Invoke hook `hname` on entity, if available; otherwise return nil"
   [ent hname & args]
   (when-let [hf (hook ent hname)]
     (apply hf ent args)))
+
+(defn maybe-invoke-hook
+  "If the entity has a hook `hname`, invoke it; otherwise, return `default`"
+  [default ent hname & args]
+  (if-let [hf (hook ent hname)]
+    (apply hf ent args)
+    default))
 
 (defn validate!
   "Invoke the :validate hook on the entity, passing it the given map of values.

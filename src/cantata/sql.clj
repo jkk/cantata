@@ -257,6 +257,10 @@
                                prepped? [(:expanded-query q) (:env q) (:added-paths q)]
                                (or expanded (plain-sql? q)) [q env]
                                :else (cq/expand-query dm q :force-pk force-pk))
+        from-ent (cdm/entity dm (:from eq))
+        [eq env added-paths] (cdm/maybe-invoke-hook
+                               [eq env added-paths]
+                               from-ent :before-query eq env added-paths)
         [sql & sql-params] (if prepped?
                              (into [(:sql q)] (map #(get params %) (:param-names q)))
                              (to-sql eq
@@ -268,7 +272,6 @@
         marshaller (cds/get-marshaller ds)
         jdbc-q (into [sql] (map marshaller sql-params))
         _ (when cu/*verbose* (prn jdbc-q))
-        from-ent (cdm/entity dm (:from eq))
         row-fn (get-row-fn ds eq from-ent env)
         [cols & rows] (jd/query ds jdbc-q
                                 :identifiers dasherize
