@@ -1,17 +1,14 @@
-- can't combine :with and :include when one is a subpath of the other
+- bug: can't combine :with and :include when one is a subpath of the other
 	- have to handle each sucessive shortest path, regardless of clause?
 - prismatic's schema to validate records and other bits
-- after-query hooks - per row/map
+- consider lazy fetching strategy
+	- disinclined to provide it as an option - implicit n+1 nastiness
 - multiple data source types?
 	- jdbc, pure clojure, datomic(??)
 - user guide
 	- rel loading: http://docs.sqlalchemy.org/en/latest/orm/loading.html
 - subquery rel loading strategy?
 - allow data source to be a function
-- move all hooks to data-source atom
-	- add-hook!
-	- hooks in dm spec just a shortcut
-- per ds/dm hooks - after-query, before-save
 - java logging
 	- trace logging
 - tests for recursive rels
