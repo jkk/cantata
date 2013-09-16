@@ -1047,7 +1047,7 @@
             m many-results))))))
 
 (defn multi-query
-  "Implementation of `cantata.core/querym`. See that function for more info."
+  "Implementation of :multiple query strategy"
   [query-fn dm q & opts]
   (let [[eq env] (expand-query dm q :expand-joins false)
         ent (-> (env (:from eq)) :resolved :value)

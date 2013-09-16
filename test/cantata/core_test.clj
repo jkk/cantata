@@ -160,18 +160,18 @@
       (setify (c/query ds sales-by-store-q)) (setify [{:manager [{:last-name "Stephens", :first-name "Jon"}], :%sum.payment.amount 8192.91M, :country-name "Australia", :city-name "Woodridge", :id 2} {:manager [{:last-name "Hillyer", :first-name "Mike"}], :%sum.payment.amount 8461.99M, :country-name "Canada", :city-name "Lethbridge", :id 1}])
       (setify (c/query ds sales-by-cat-q)) (setify [{:%sum.film.rental.payment.amount 1110.19M, :name "Action"} {:%sum.film.rental.payment.amount 1189.87M, :name "Animation"} {:%sum.film.rental.payment.amount 912.71M, :name "Children"} {:%sum.film.rental.payment.amount 809.86M, :name "Classics"} {:%sum.film.rental.payment.amount 1051.72M, :name "Comedy"} {:%sum.film.rental.payment.amount 806.84M, :name "Documentary"} {:%sum.film.rental.payment.amount 853.83M, :name "Drama"} {:%sum.film.rental.payment.amount 1133.96M, :name "Family"} {:%sum.film.rental.payment.amount 1134.32M, :name "Foreign"} {:%sum.film.rental.payment.amount 979.67M, :name "Games"} {:%sum.film.rental.payment.amount 842.07M, :name "Horror"} {:%sum.film.rental.payment.amount 1065.58M, :name "Music"} {:%sum.film.rental.payment.amount 1234.46M, :name "New"} {:%sum.film.rental.payment.amount 1510.41M, :name "Sci-Fi"} {:%sum.film.rental.payment.amount 1038.68M, :name "Sports"} {:%sum.film.rental.payment.amount 980.73M, :name "Travel"}]))
     (testing
-      "query and querym parity"
+      ":single and :multiple strategy parity"
       (let [r1 (setify (c/query ds [full-film :where [:= :id 123]]))
-            r2 (setify (c/querym ds [full-film :where [:= :id 123]]))]
+            r2 (setify (c/query ds [full-film :where [:= :id 123]] :strategy :mulitple))]
         (are= r1 r2))
       (let [r1 (setify (c/query ds canada-q))
-            r2 (setify (c/querym ds canada-q))
+            r2 (setify (c/query ds canada-q :strategy :multiple))
             pq (c/prepare-query
                  ds (assoc canada-q :where [:= :?country :renter.country-name]))
             r3 (setify (c/query ds pq :params {:country "Canada"}))
             r4 (setify (c/by-id ds :film 1 [:select [:* :category :language]]))
             r5 (setify (c/query1 ds [:from :film :where [:= 1 :id] :select [:* :category :language]]))
-            r6 (setify (c/querym1 ds [:from :film :where [:= 1 :id] :select [:* :category :language]]))]
+            r6 (setify (c/query1 ds [:from :film :where [:= 1 :id] :select [:* :category :language]] :strategy :multiple))]
         (are=
           47 (count r1)
           r1 r2

@@ -290,6 +290,24 @@
         [cols rows]))
     (with-query-maps* ds q opts identity)))
 
+(declare query)
+
+(defn ^:private multi-query
+  [ds q opts]
+  (when (:flat opts)
+    (throw-info "Cannot execute flat queries with :strategy :multiple" {:q q}))
+  (when (:vectors opts)
+    (throw-info "Cannot execute vector queries with :strategy :multiple" {:q q}))
+  (when (sql/plain-sql? q)
+    (throw-info "Cannot execute plain SQL queries with :strategy :multiple" {:q q}))
+  (when (sql/prepared? q)
+    (throw-info "Cannot execute prepared queries with :strategy :multiple; use query instead" {:q q}))
+  (let [dm (cds/get-data-model ds)
+        opts* (apply concat (dissoc opts :strategy))
+        query-fn (fn [q & opts]
+                   (apply query ds q opts*))]
+    (apply cq/multi-query query-fn dm q opts*)))
+
 (defn query
   "Executes query `q` against data source `ds` in a single round-trip.
 
@@ -310,10 +328,19 @@
   NOTE: using the :limit clause may truncate nested values from to-many
   relationships. To limit your query to a single top-level entity record while
   retrieving all related records, restrict the results using the :where clause,
-  or use the `querym` function.
+  or set the :strategy option to :multiple.
 
   Keyword options:
 
+    :strategy - fetching strategy to use:
+                  :single   - (default) fetches all data in a single round trip
+                  :multiple - fetches data in multiple round trips, one for
+                              each selected second-level path segment that is
+                              part of a path that contains a to-many
+                              relationship. Primary keys of the top-level
+                              entity results are used to fetch the related
+                              results. :limit and :where clauses apply only to
+                              the top-level entity query.
         :flat - do not nest results; results for the same primary key may be
                 returned multiple times if the query selects paths from any
                 to-many relationships
@@ -325,19 +352,24 @@
                 the low-level database query when to-many relationships are
                 selected (which it does to make nesting more predictable and
                 consistent)"
-  [ds q & {:keys [flat vectors force-pk] :as opts}]
-  (if (or flat vectors (sql/plain-sql? q))
-    (flat-query ds q opts)
-    (with-query-rows* ds q (assoc opts :force-pk (not (false? force-pk)))
-      (fn [cols rows]
-        (nest cols rows :ds-opts (cds/get-options ds))))))
+  [ds q & {:keys [strategy flat vectors force-pk] :as opts}]
+  (if (= :multiple strategy)
+    (multi-query ds q opts)
+    (if (or flat vectors (sql/plain-sql? q))
+      (flat-query ds q opts)
+      (with-query-rows* ds q (assoc opts :force-pk (not (false? force-pk)))
+        (fn [cols rows]
+          (nest cols rows :ds-opts (cds/get-options ds)))))))
 
 (defn query1
-  "Like `query` but returns the first result. Does not limit the query
-  in any way, so it's the responsbility of the caller to not query for more
-  results than needed."
+  "Like `query` but returns the first result. If :strategy is :multiple, limits
+  the query to a single result; otherwise, does not limit the query, so it's
+  the responsbility of the caller to not query for more results than needed."
   [ds q & opts]
   (let [optsm (apply hash-map opts)
+        q (if (= :multiple (:strategy optsm))
+            (sql/add-limit-1 q)
+            q)
         ret (apply query ds q opts)]
     (if (:vectors optsm)
       (when-let [ret1 (first (second ret))]
@@ -353,43 +385,15 @@
   [ds q & opts]
   (apply sql/query-count (force ds) (cds/get-data-model ds) q opts))
 
-(defn querym
-  "Like `query` but may perform multiple data source round trips - one for
-  each selected second-level path segment that is part of a path that contains
-  a to-many relationship. Primary keys of the top-level entity results are used
-  to fetch the related results.
-
-  :limit and :where clauses apply only to the top-level entity query."
-  [ds q & opts]
-  (when (sql/plain-sql? q)
-    (throw-info "querym cannot execute plain SQL queries; use query instead" {:q q}))
-  (when (sql/prepared? q)
-    (throw-info "querym cannot execute prepared queries; use query instead" {:q q}))
-  (let [dm (cds/get-data-model ds)
-        query-fn (fn [q & opts]
-                   (apply query ds q opts))]
-    (apply cq/multi-query query-fn dm q opts)))
-
-(defn querym1
-  "Adds a \"limit 1\" clause to the query and executes it, potentially in
-  multiple round trips (one for each to-many relationship selected - the limit
-  clause will not affect these). See `querym`."
-  [ds q & opts]
-  (let [ms (apply querym ds (sql/add-limit-1 q) opts)]
-    (when-let [m (first ms)]
-      (with-meta m (meta ms)))))
-
 (defn by-id
   "Fetches the entity record from the data source whose primary key value is
-  equal to `id`. Uses `querym1` to execute the query, so multiple round trips
-  to the data source may occur. Query clauses from `q` will be merged into the
-  generated query."
+  equal to `id`.Query clauses from `q` will be merged into the generated query."
   [ds ename id & [q & opts]]
   (let [ent (cdm/entity (cds/get-data-model ds) ename)
         baseq {:from ename :where (cq/build-key-pred (:pk ent) id)}]
-    (apply querym1 ds (if (map? q)
-                        [baseq q]
-                        (cons baseq q))
+    (apply query1 ds (if (map? q)
+                       [baseq q]
+                       (cons baseq q))
            opts)))
 
 (defn getf

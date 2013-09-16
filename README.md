@@ -108,13 +108,14 @@ You can refer to related entities or fields anywhere in a query, and Cantata wil
           :where [:= "Canada" :renter.country-name]])
 ```
 
-You can tell Cantata to fetch data from related tables in multiple database round trips if you prefer, using `querym`. With `querym`, primary keys gathered during an initial query will be used to find data from related tables.
+You can tell Cantata to fetch data from related tables in multiple database round trips if you prefer, by setting the `:strategy` option to `:multiple`. With this strategy, primary keys gathered during an initial query will be used to find data from related tables.
 
 ```clj
 ;; 3 database round trips - an extra for each to-many relationship
-(c/querym ds [:from :film
-              :select [:* :language :category :actor]
-              :limit 10])
+(c/query ds [:from :film
+             :select [:* :language :category :actor]
+             :limit 10]
+         :strategy :multiple)
 ```
 
 Both fetching strategies -- single vs. multiple round trips -- have benefits and costs. Cantata lets you choose.
@@ -454,10 +455,19 @@ for values selected from related entities. Example:
 NOTE: using the `:limit` clause may truncate nested values from to-many
 relationships. To limit your query to a single top-level entity record while
 retrieving all related records, restrict the results using the `:where` clause,
-or use the `querym` function.
+or set the `:strategy` option to `:multiple`.
 
 Keyword options:
 
+    :strategy - fetching strategy to use:
+                  :single   - (default) fetches all data in a single round trip
+                  :multiple - fetches data in multiple round trips, one for
+                              each selected second-level path segment that is
+                              part of a path that contains a to-many
+                              relationship. Primary keys of the top-level
+                              entity results are used to fetch the related
+                              results. :limit and :where clauses apply only to
+                              the top-level entity query.
         :flat - do not nest results; results for the same primary key may be
                 returned multiple times if the query selects paths from any
                 to-many relationships
@@ -477,33 +487,6 @@ Keyword options:
 Like `query` but returns only the first result. Does not limit the query
 in any way, so it's the responsbility of the caller to not query for more
 results than needed.
-
-#### `querym [ds q & opts]`
-  
-Like `query` but may perform multiple data source round trips - one for
-each selected second-level path segment that is part of a path that contains
-a to-many relationship. Primary keys of the top-level entity results are used
-to fetch the related results.
-
-`:limit` and `:where` clauses apply only to the top-level entity query.
-
-```clj
-;; 3 database round trips - one for each to-many relationship
-(c/querym ds [:from :film
-              :select [:* :language :category :actor]
-              :limit 10])
-```
-
-#### `querym1 [ds q & opts]`
-
-Adds a "limit 1" clause to the query and executes it, potentially in
-multiple round trips (one for each to-many relationship selected - the limit
-clause will not affect these).
-
-```clj
-;; 3 database round trips, one result
-(c/querym1 ds [:from :film
-               :select [:* :language :category :actor]])
 ```
 
 #### `query-count [ds q & opts]`
@@ -521,8 +504,7 @@ top-level values.
 #### `by-id [ds ename id & [q & opts]]`
 
 Fetches the entity record from the data source whose primary key value is
-equal to `id`. Uses `querym1` to execute the query, so multiple round trips
-to the data source may occur. Query clauses from `q` will be merged into the
+equal to `id`. Query clauses from `q` will be merged into the
 generated query.
 
 #### `getf [results path]`
@@ -643,7 +625,8 @@ Prints all SQL queries
 
 ```clj
 (c/verbose
-  (c/querym ds [:from :film :select [:id :actor]]))
+  (c/query ds [:from :film :select [:id :actor]
+           :strategy :multiple]))
 ```
 
 #### `with-debug [binding & body]`
