@@ -93,8 +93,7 @@
         (println subprot "- Reflecting data model")
         (with-redefs [ds (c/data-source
                            db-spec model
-                           :reflect true
-                           :unordered-maps true)]
+                           :reflect true)]
           (println subprot "- Importing data")
           (import-data! ds)
           (println subprot "- Running tests")
