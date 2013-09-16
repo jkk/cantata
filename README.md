@@ -5,7 +5,7 @@
 Melodic SQL for Clojure:
 
 * Relationship-aware querying and saving
-* Pure-data queries
+* Queries made of data
 * Legacy-friendly: custom name mappings, composite primary keys
 * No implicit global state
 * Extensibile
@@ -83,7 +83,7 @@ The following query fetches the film with id 1, plus related language, category,
              {:name "LUCILLE TRACY", :id 20}]}]
 ```
 
-Queries are made of simple values, and can be amended on the fly:
+Queries are made of immutable data, and can be amended on the fly:
 
 ```clj
 (def kid-film {:from :film
@@ -144,7 +144,7 @@ If needed, you can drop down to plain SQL:
 
 ### Query DSL
 
-Because queries are made of values, you can build them up yourself using the usual Clojure tools (see [Query Format](#query-format)). However, Cantata also provides helper functions in the `canata.dsl` namespace for building queries piecemeal:
+Because queries are data structures, you can build them up yourself using the usual Clojure tools (see [Query Format](#query-format)). However, Cantata also provides helper functions in the `canata.dsl` namespace for building queries piecemeal:
 
 ```clj
 (ns example.core
