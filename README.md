@@ -17,7 +17,7 @@ Melodic SQL for Clojure:
 Use [Leiningen](http://leiningen.org/) and add this to your project's dependencies:
 
 ```clj
-[cantata "0.1.4"]
+[cantata "0.1.5"]
 ```
 
 __This is an alpha release. API subject to change. Feedback welcome.__
