@@ -20,6 +20,8 @@ Use [Leiningen](http://leiningen.org/) and add this to your project's dependenci
 [cantata "0.1.4"]
 ```
 
+__This is an alpha release. API subject to change. Feedback welcome.__
+
 ## Crash Course
 
 See the [Quick Reference](#quick-reference) for a more systematic breakdown.
@@ -304,8 +306,9 @@ to ensure uniqueness, like so: `:_rel-name.entity-name`.
 Shortcuts take the form of a map of shortcut path to target path. Target
 paths can point to rels or fields.
 
-Hooks take form of a map from hook name to hook function. Available hooks
-and their corresponding arguments and expected return values:
+Hooks are experimental and may change in future versions. They take the form
+of a map from hook name to hook function. Available hooks and their
+corresponding arguments and expected return values:
 
     :before-query  [ent expanded-q env added-paths] -> [expanded-q env added-paths]
     :after-query   [ent results] -> results
@@ -482,9 +485,9 @@ Keyword options:
 
 #### `query1 [ds q & opts]`
 
-Like `query` but returns only the first result. Does not limit the query
-in any way, so it's the responsbility of the caller to not query for more
-results than needed.
+Like `query` but returns the first result. If `:strategy` is `:multiple`, limits
+the query to a single result; otherwise, does not limit the query, so it's
+the responsbility of the caller to not query for more results than needed.
 
 #### `query-count [ds q & opts]`
 

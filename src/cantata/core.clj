@@ -80,8 +80,9 @@
   Shortcuts take the form of a map of shortcut path to target path. Target
   paths can point to rels or fields.
 
-  Hooks take form of a map from hook name to hook function. Available hooks and
-  their corresponding arguments and expected return values:
+  Hooks are experimental and may change in future versions. They take the form
+  of a map from hook name to hook function. Available hooks and their
+  corresponding arguments and expected return values:
 
     :before-query  [ent expanded-q env added-paths] -> [expanded-q env added-paths]
     :after-query   [ent results] -> results
