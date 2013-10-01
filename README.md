@@ -67,19 +67,17 @@ Note that Cantata does not create database tables or do migrations. We're merely
 
 Cantata can leverage the data model to perform queries that smartly combine results from any number of related tables, even when many-to-many relationships are involved.
 
-The following query fetches the film with id 1, plus related language, category, and actor data -- all in one database round trip, and nicely nested:
+The following query fetches the film with id 1, plus related language and actor data -- all in one database round trip, and nicely nested:
 
 ```clj
 (c/query ds {:from :film
-             :select [:id :title :release-year
-                      :language :category :actor]
+             :select [:id :title :release-year :language :actor]
              :where [:= 1 :id]})
 
 => [{:id 1
      :title "ACADEMY DINOSAUR"
      :release-year 2006
      :language {:name "English", :id 1}
-     :category [{:name "Documentary", :id 6}]
      :actor [{:name "PENELOPE GUINESS", :id 1}
              {:name "CHRISTIAN GABLE", :id 10}
              {:name "LUCILLE TRACY", :id 20}]}]
@@ -121,6 +119,8 @@ You can tell Cantata to fetch data from related tables in multiple database roun
 ```
 
 Both fetching strategies -- single vs. multiple round trips -- have benefits and costs. Cantata lets you choose.
+
+More fetching strategies may be added in future versions (lazy fetching, for example).
 
 Joins can be made explicit, which overrides implicit joins of the same name:
 
