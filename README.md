@@ -108,7 +108,7 @@ You can refer to related entities or fields anywhere in a query, and Cantata wil
           :where [:= "Canada" :renter.country-name]])
 ```
 
-You can tell Cantata to fetch data from related tables in multiple database round trips if you prefer, by setting the `:strategy` option to `:multiple`. With this strategy, primary keys gathered during an initial query will be used to find data from related tables.
+You can tell Cantata to fetch data from related tables in multiple database round trips if you prefer, by setting the `:strategy` option to `:multiple`. With this strategy, primary keys gathered during an initial, top-level query will be used to find data from related tables.
 
 ```clj
 ;; 3 database round trips - an extra for each to-many relationship
@@ -118,11 +118,9 @@ You can tell Cantata to fetch data from related tables in multiple database roun
          :strategy :multiple)
 ```
 
-Both fetching strategies -- single vs. multiple round trips -- have benefits and costs. Cantata lets you choose.
+Of course, when selecting data from one-to-many or many-to-many relationships, you should keep database impact in mind. Single round trips are best when you're selecting a small number of columns from the target table, because each top-level row gets repeated for each related row in the result set (setting the `:flat` query option to true will show this). Multiple round trips prevent reptition of top-level rows but you pay for each trip. Cantata assumes you know what you're doing. Don't shoot your foot off!
 
-More fetching strategies may be added in future versions (lazy fetching, for example).
-
-Joins can be made explicit, which overrides implicit joins of the same name:
+Joins can always be made explicit, which overrides implicit joins of the same name:
 
 ```clj
 ;; No nesting

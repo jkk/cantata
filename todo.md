@@ -1,3 +1,5 @@
+- traverse into SqlCalls to qualify fields
+	- how to distinguish fields from other args for special fns?
 - bug: can't combine :with and :include when one is a subpath of the other
 	- have to handle each sucessive shortest path, regardless of clause?
 - prismatic's schema to validate records and other bits
@@ -24,8 +26,6 @@
 	- reify java.sql.Array?
 	- see http://tech.valgog.com/2009/02/passing-arrays-to-postgresql-database.html
 - derived fields - fn of one or more other paths
-- traverse into SqlCalls to qualify fields
-	- how to distinguish fields from other args for special fns?
 - :deferred field attr, for blobs and such - i.e., exclude from :*
 - prepared statements??
 - source/schema-level options
