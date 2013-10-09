@@ -1,3 +1,4 @@
+- have ALL queries go through prepare-query
 - traverse into SqlCalls to qualify fields
 	- how to distinguish fields from other args for special fns?
 - bug: can't combine :with and :include when one is a subpath of the other

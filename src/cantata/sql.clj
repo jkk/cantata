@@ -222,14 +222,32 @@
   (let [[eq env added-paths] (if (or expanded (plain-sql? q))
                                [q env]
                                (cq/expand-query dm q :force-pk (not (false? force-pk))))
-        [sql] (apply to-sql eq
-                     :data-model dm
-                     :quoting (cds/get-quoting ds)
-                     :expanded true
-                     :env env
-                     (apply concat opts))
-        param-names (map cq/param-name (filter cq/param? (keys env)))]
-    (r/->PreparedQuery eq env sql param-names added-paths)))
+        [sql & params] (apply to-sql eq
+                              :data-model dm
+                              :quoting (cds/get-quoting ds)
+                              :expanded true
+                              :env env
+                              (apply concat opts))
+        param-counter (atom 0) ;for naming anonymous params
+        [param-names param-values] (loop [ret []
+                                          params params
+                                          named-params (map cq/param-name
+                                                            (filter cq/param? (keys env)))
+                                          param-values {}]
+                                     (if (empty? params)
+                                       [ret param-values]
+                                       (let [param (first params)]
+                                         (if (nil? param)
+                                           (recur (conj ret (first named-params))
+                                                  (rest params)
+                                                  (rest named-params)
+                                                  param-values)
+                                           (let [param-name (keyword (str "_" (swap! param-counter inc)))]
+                                             (recur (conj ret param-name)
+                                                    (rest params)
+                                                    named-params
+                                                    (assoc param-values param-name param)))))))]
+    (r/->PreparedQuery eq env sql param-names param-values added-paths)))
 
 (defn dasherize [s]
   (string/replace s #"(?<!^|\.)_" "-"))
@@ -262,7 +280,8 @@
                                [eq env added-paths]
                                ds from-ent :before-query eq env added-paths)
         [sql & sql-params] (if prepped?
-                             (into [(:sql q)] (map #(get params %) (:param-names q)))
+                             (let [params (merge (:param-values q) params)]
+                               (into [(:sql q)] (map #(get params %) (:param-names q))))
                              (to-sql eq
                                      :data-model dm
                                      :quoting (cds/get-quoting ds)

@@ -103,6 +103,7 @@
                   ::quoting (if (contains? opts :quoting)
                               (:quoting opts)
                               (detect-quoting ds))
+                  ::query-cache (:query-cache opts)
                   ::hooks (:hooks opts)
                   ::marshaller (make-marshalling-fn opts marshal-fnmap)
                   ::unmarshaller (make-marshalling-fn opts unmarshal-fnmap))]
@@ -127,6 +128,9 @@
 
 (defn get-quoting [ds]
   (::quoting (force ds)))
+
+(defn get-query-cache [ds]
+  (::query-cache (force ds)))
 
 (defn get-marshaller [ds]
   (::marshaller (force ds)))

@@ -130,6 +130,8 @@
            :quoting - identifier quoting style to use; auto-detects if
                       left unspecified; set to nil to turn off quoting (this
                       will break many queries); :ansi, :mysql, or :sqlserver
+       :query-cache - a function which, when called with the data source, a
+                      query, and keyword options, returns a PreparedQuery
              :hooks - data source-wide hooks; see `make-data-model` for
                       available hooks and format
           :max-idle - max pool idle time in seconds; default 30 mins
@@ -235,10 +237,13 @@
     (with-query-rows* ds q nil body-fn))
   ([ds q opts body-fn]
     (let [dm (cds/get-data-model ds)
-          ret (apply sql/query (force ds) dm q body-fn
-                     (if (map? opts)
-                       (apply concat opts)
-                       opts))
+          opts (if (map? opts)
+                 (apply concat opts)
+                 opts)
+          q (if-let [qcache (cds/get-query-cache ds)]
+              (apply qcache (force ds) q opts)
+              q)
+          ret (apply sql/query (force ds) dm q body-fn opts)
           qmeta (query-meta (if (vector? (first ret))
                               (first ret)
                               ret))]
