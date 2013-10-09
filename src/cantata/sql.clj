@@ -227,7 +227,7 @@
                               :quoting (cds/get-quoting ds)
                               :expanded true
                               :env env
-                              (apply concat opts))
+                              (apply concat (dissoc opts :params)))
         param-counter (atom 0) ;for naming anonymous params
         [param-names param-values] (loop [ret []
                                           params params

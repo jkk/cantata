@@ -342,6 +342,9 @@
 
 (declare resolve-path)
 
+(defn new-env []
+  (om/ordered-map))
+
 (defn env-get
   "Looks up path in (possibly stacked) env"
   ([env path depth]
@@ -542,7 +545,7 @@
       q)))
 
 (defn ^:private get-query-env [dm ent q & [env]]
-  (let [env (or (immediate-env env) {})]
+  (let [env (or (immediate-env env) (new-env))]
     (into env
           (let [joins (get-join-clauses q)]
             (for [[to on] (partition 2 joins)
@@ -560,7 +563,7 @@
 (declare expand-query)
 
 (defn ^:private expand-subquery [dm q env]
-  (let [[q env] (expand-query dm q :env (push-env env {}))]
+  (let [[q env] (expand-query dm q :env (push-env env (new-env)))]
     (with-meta q {::env env})))
 
 (defn ^:private expand-join-subquery [dm env [q env] clause]
@@ -761,6 +764,7 @@
         _ (when-not (and ent (dm/entity? ent))
             (throw-info ["Unrecognized :from -" from] {:q q}))
         q (if (:from q) q (assoc q :from from))
+        env (or env (new-env))
         env (env-assoc
               (env-merge env (get-query-env dm ent q env))
               (:name ent) (dm/resolve-path dm ent (:name ent)))
@@ -874,7 +878,7 @@
 
 (defn nest-in [m [k & ks] [rev? & revs] v]
   (if ks
-    (let [nv (nest-in {} ks revs v)]
+    (let [nv (nest-in {} ks revs v)] ;FIXME: should this be an ordered map?
       (assoc m k (if rev? [nv] nv)))
     (assoc m k (if (and (not rev?) (sequential? v))
                  (first v)
