@@ -130,8 +130,8 @@
            :quoting - identifier quoting style to use; auto-detects if
                       left unspecified; set to nil to turn off quoting (this
                       will break many queries); :ansi, :mysql, or :sqlserver
-       :query-cache - a function which, when called with the data source, a
-                      query, and keyword options, returns a PreparedQuery
+       :query-cache - an atom that wraps a map-like object, such as a cache
+                      from clojure.core.cache; used to cache prepared queries
              :hooks - data source-wide hooks; see `make-data-model` for
                       available hooks and format
           :max-idle - max pool idle time in seconds; default 30 mins
@@ -231,6 +231,17 @@
   ([results k]
     (k (::query (meta results)))))
 
+(defn prepare-query
+  "Return a PreparedQuery record, which contains ready-to-execute SQL and
+  other necessary meta data. When executed, the query will accept bindable
+  parameters. (Bindable paramters can be included in queries using keywords
+  like :?actor-name.)
+
+  Unlike a JDBC PreparedStatement, a PreparedQuery record contains no
+  connection-specific information and can be reused at any time."
+  [ds q & opts]
+  (apply sql/prepare (force ds) (cds/get-data-model ds) q opts))
+
 (defn with-query-rows*
   "Helper function for with-query-rows"
   ([ds q body-fn]
@@ -240,9 +251,15 @@
           opts (if (map? opts)
                  (apply concat opts)
                  opts)
-          q (if-let [qcache (cds/get-query-cache ds)]
-              (apply qcache (force ds) q opts)
-              q)
+          q (or (when (sql/prepared? q)
+                  q)
+                (when-let [qcache (cds/get-query-cache ds)]
+                  (if-let [e (find @qcache q)]
+                    (val e)
+                    (let [pq (apply prepare-query (force ds) q opts)]
+                      (swap! qcache assoc q pq)
+                      pq)))
+                q)
           ret (apply sql/query (force ds) dm q body-fn opts)
           qmeta (query-meta (if (vector? (first ret))
                               (first ret)
@@ -487,17 +504,6 @@
            :data-model dm
            :quoting (when ds (cds/get-quoting ds))
            opts)))
-
-(defn prepare-query
-  "Return a PreparedQuery record, which contains ready-to-execute SQL and
-  other necessary meta data. When executed, the query will accept bindable
-  parameters. (Bindable paramters can be included in queries using keywords
-  like :?actor-name.)
-
-  Unlike a JDBC PreparedStatement, a PreparedQuery record contains no
-  connection-specific information and can be reused at any time."
-  [ds q & opts]
-  (apply sql/prepare (force ds) (cds/get-data-model ds) q opts))
 
 ;;;;
 

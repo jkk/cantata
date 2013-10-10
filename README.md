@@ -351,8 +351,8 @@ Keyword options (all default to false unless otherwise noted):
             :quoting - identifier quoting style to use; auto-detects if
                        left unspecified; set to nil to turn off quoting (this
                        will break many queries); :ansi, :mysql, or :sqlserver
-        :query-cache - a function which, when called with the data source, a
-                       query, and keyword options, returns a PreparedQuery
+        :query-cache - an atom that wraps a map-like object, such as a cache
+                       from clojure.core.cache; used to cache prepared queries
               :hooks - data source-wide hooks; see `make-data-model` for
                        available hooks and format
            :max-idle - max pool idle time in seconds; default 30 mins
