@@ -145,7 +145,12 @@
                           :order-by [:country-name :city-name]}
         sales-by-cat-q [:from :category
                         :select [:name :%sum.film.rental.payment.amount]
-                        :group-by :id]]
+                        :group-by :id]
+        join-q [:from :film
+                :select [:title :actor.name]
+                :where [:= 1 :id]
+                :join [[:film-actor :fa] [:= :id :fa.film-id]
+                       :actor [:= :fa.actor-id :actor.id]]]]
     (are=
       (:title (c/query1 ds [:from :film :where [:= 123 :id]])) "CASABLANCA SUPER" 
       (set (c/queryf ds [:select :film.actor :where [:= 123 :id]])) (set [{:name "KIRSTEN AKROYD", :id 92} {:name "WALTER TORN", :id 102} {:name "ANGELA WITHERSPOON", :id 144} {:name "REESE WEST", :id 197}])
@@ -158,7 +163,8 @@
       cn2 (set '("Sports" "Classics" "Family" "Foreign" "Documentary" "Games" "Action" "New" "Animation"))
       (set (c/query ds cat-counts-q)) (set [{:%count.id 2, :name "Animation"} {:%count.id 3, :name "Classics"} {:%count.id 4, :name "Comedy"} {:%count.id 1, :name "Documentary"} {:%count.id 1, :name "Drama"} {:%count.id 1, :name "Family"} {:%count.id 1, :name "Games"} {:%count.id 1, :name "Music"} {:%count.id 2, :name "New"} {:%count.id 1, :name "Sci-Fi"} {:%count.id 1, :name "Travel"}])
       (setify (c/query ds sales-by-store-q)) (setify [{:manager [{:last-name "Stephens", :first-name "Jon"}], :%sum.payment.amount 8192.91M, :country-name "Australia", :city-name "Woodridge", :id 2} {:manager [{:last-name "Hillyer", :first-name "Mike"}], :%sum.payment.amount 8461.99M, :country-name "Canada", :city-name "Lethbridge", :id 1}])
-      (setify (c/query ds sales-by-cat-q)) (setify [{:%sum.film.rental.payment.amount 1110.19M, :name "Action"} {:%sum.film.rental.payment.amount 1189.87M, :name "Animation"} {:%sum.film.rental.payment.amount 912.71M, :name "Children"} {:%sum.film.rental.payment.amount 809.86M, :name "Classics"} {:%sum.film.rental.payment.amount 1051.72M, :name "Comedy"} {:%sum.film.rental.payment.amount 806.84M, :name "Documentary"} {:%sum.film.rental.payment.amount 853.83M, :name "Drama"} {:%sum.film.rental.payment.amount 1133.96M, :name "Family"} {:%sum.film.rental.payment.amount 1134.32M, :name "Foreign"} {:%sum.film.rental.payment.amount 979.67M, :name "Games"} {:%sum.film.rental.payment.amount 842.07M, :name "Horror"} {:%sum.film.rental.payment.amount 1065.58M, :name "Music"} {:%sum.film.rental.payment.amount 1234.46M, :name "New"} {:%sum.film.rental.payment.amount 1510.41M, :name "Sci-Fi"} {:%sum.film.rental.payment.amount 1038.68M, :name "Sports"} {:%sum.film.rental.payment.amount 980.73M, :name "Travel"}]))
+      (setify (c/query ds sales-by-cat-q)) (setify [{:%sum.film.rental.payment.amount 1110.19M, :name "Action"} {:%sum.film.rental.payment.amount 1189.87M, :name "Animation"} {:%sum.film.rental.payment.amount 912.71M, :name "Children"} {:%sum.film.rental.payment.amount 809.86M, :name "Classics"} {:%sum.film.rental.payment.amount 1051.72M, :name "Comedy"} {:%sum.film.rental.payment.amount 806.84M, :name "Documentary"} {:%sum.film.rental.payment.amount 853.83M, :name "Drama"} {:%sum.film.rental.payment.amount 1133.96M, :name "Family"} {:%sum.film.rental.payment.amount 1134.32M, :name "Foreign"} {:%sum.film.rental.payment.amount 979.67M, :name "Games"} {:%sum.film.rental.payment.amount 842.07M, :name "Horror"} {:%sum.film.rental.payment.amount 1065.58M, :name "Music"} {:%sum.film.rental.payment.amount 1234.46M, :name "New"} {:%sum.film.rental.payment.amount 1510.41M, :name "Sci-Fi"} {:%sum.film.rental.payment.amount 1038.68M, :name "Sports"} {:%sum.film.rental.payment.amount 980.73M, :name "Travel"}])
+      (setify (c/query ds join-q)) (setify [{:actor [{:name "PENELOPE GUINESS"} {:name "CHRISTIAN GABLE"} {:name "LUCILLE TRACY"} {:name "SANDRA PECK"} {:name "JOHNNY CAGE"} {:name "MENA TEMPLE"} {:name "WARREN NOLTE"} {:name "OPRAH KILMER"} {:name "ROCK DUKAKIS"} {:name "MARY KEITEL"}], :title "ACADEMY DINOSAUR"}]))
     (testing
       ":single and :multiple strategy parity"
       (let [r1 (setify (c/query ds [full-film :where [:= :id 123]]))

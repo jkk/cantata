@@ -130,12 +130,12 @@ Joins can always be made explicit, which overrides implicit joins of the same na
       :select [:title :actor.name]
       :where [:= 1 :id]
       :join [[:film-actor :fa] [:= :id :fa.film-id]
-             :actor [:= :fa.actor-id :actor.id]]]
-  :flat true)
-=> ({:title "ACADEMY DINOSAUR" :actor.name "PENELOPE GUINESS"}
-    {:title "ACADEMY DINOSAUR" :actor.name "CHRISTIAN GABLE"}
-    {:title "ACADEMY DINOSAUR" :actor.name "LUCILLE TRACY"}
-    …)
+             :actor [:= :fa.actor-id :actor.id]]])
+=> [{:title "ACADEMY DINOSAUR"
+     :actor [{:name "PENELOPE GUINESS"}
+             {:name "CHRISTIAN GABLE"}
+             {:name "LUCILLE TRACY"}
+             …]}]
 ```
 
 If needed, you can drop down to plain SQL:

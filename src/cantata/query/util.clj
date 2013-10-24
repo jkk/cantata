@@ -266,9 +266,11 @@
          revs []]
     (if-not qual
       (into [] (reverse revs))
-      (recur
-        (first (cu/unqualify qual))
-        (conj revs (some (comp not :one :rel) (-> qual env :chain)))))))
+      (let []
+        (recur
+          (first (cu/unqualify qual))
+          (conj revs (or (some (comp not :one :rel) (-> qual env :chain))
+                         (= :joined-entity (-> qual env :resolved :type)))))))))
 
 (defn get-rp-pk [resolved-path default-pk]
   (if-let [chain (not-empty (:chain resolved-path))]
