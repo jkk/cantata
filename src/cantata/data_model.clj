@@ -17,6 +17,16 @@
     (map? spec) spec
     (keyword? spec) {:name spec}))
 
+(defn guess-db-name
+  "Given an entity name, tries to guess the table name"
+  [ename]
+  (string/replace (name ename) "-" "_"))
+
+(defn guess-rel-key
+  "Given a rel name, tries to guess the name of the foreign key"
+  [rname]
+  (keyword (str (name (cu/last-part rname)) "-id")))
+
 (defn make-field
   "Transform a field spec - a keyword or map - into a Field record"
   [m]
@@ -26,7 +36,7 @@
     (r/map->Field
       (if (:db-name m)
         m
-        (assoc m :db-name (reflect/guess-db-name (:name m)))))))
+        (assoc m :db-name (guess-db-name (:name m)))))))
 
 (defn make-rel
   "Transform a rel spec - a keyword or map - into a Rel record"
@@ -42,10 +52,10 @@
                 (not ename) (assoc :ename name)
                 (and (not (:key m))) (assoc :key (if reverse?
                                                    this-pk
-                                                   (reflect/guess-rel-key name)))
+                                                   (guess-rel-key name)))
                 (and (not (:other-key m))) (as-> m
                                                  (assoc m :other-key (if reverse?
-                                                                       (reflect/guess-rel-key this-name)
+                                                                       (guess-rel-key this-name)
                                                                        (:pk (get other-ents (:ename m))))))
                 (nil? reverse?) (assoc :reverse false)
                 (nil? (:one m)) (assoc :one (not reverse?)))))))
@@ -94,7 +104,7 @@
                      :fields fields
                      :rels rels
                      :shortcuts shortcuts)
-              (not (:db-name m)) (assoc :db-name (reflect/guess-db-name (:name m)))
+              (not (:db-name m)) (assoc :db-name (guess-db-name (:name m)))
               (not (:pk m)) (assoc :pk pk)
               (:validate m) (as-> m
                                   (assoc-in m [:hooks :validate] (:validate m))
@@ -203,7 +213,7 @@
                    (normalize-entity-specs entity-specs))]
       (for [espec especs]
         (let [db-name (or (:db-name espec)
-                          (reflect/guess-db-name (:name espec)))]
+                          (guess-db-name (:name espec)))]
           (assoc espec
                  :fields (or (:fields espec)
                              (apply reflect/reflect-fields ds db-name opts))

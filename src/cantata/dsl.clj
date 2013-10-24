@@ -1,6 +1,6 @@
 (ns cantata.dsl
-  "Functions for building queries piecemeal"
-  (:require [cantata.query :as cq]
+  "Public DSL for building queries piecemeal"
+  (:require [cantata.query.util :as qu]
             [cantata.util :as cu]))
 
 (defn from
@@ -30,7 +30,7 @@
   (conj (cu/vecify q) :un-select fields))
 
 (defn ^:private get-pred [preds]
-  (let [[logic-op preds] (if (cq/logic-ops (first preds))
+  (let [[logic-op preds] (if (qu/logic-ops (first preds))
                            [(first preds) (rest preds)]
                            [:and preds])
         pred1 (first preds)

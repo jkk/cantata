@@ -78,8 +78,7 @@
       ;:pooled true
       :clob-str true
       :blob-bytes true
-      :joda-dates true
-      :unordered-maps true)))
+      :joda-dates true)))
 
 (def ds nil) ;will be redef'd for test runs
 

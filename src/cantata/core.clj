@@ -5,8 +5,12 @@
             [cantata.data-model :as cdm]
             [cantata.data-source :as cds]
             [cantata.records :as r]
-            [cantata.query :as cq]
-            [cantata.sql :as sql]
+            [cantata.query.build :as qb]
+            [cantata.query.prepare :as qp]
+            [cantata.query.strategy :as qs]
+            [cantata.query.nest-results :as qn]
+            [cantata.query.util :as qu]
+            [cantata.jdbc :as cjd]
             [cantata.parse :as cpa]
             [honeysql.core :as hsql]
             [clojure.java.jdbc :as jd]
@@ -211,7 +215,7 @@
 
   Bindable parameters are denoted with a leading ? - e.g., :?actor-name"
   [& qargs]
-  (apply cq/build-query (if (vector? (first qargs))
+  (apply qb/build-query (if (vector? (first qargs))
                           (first qargs)
                           qargs)))
 
@@ -227,9 +231,9 @@
   Query meta data is normally attached to either the collection of maps
   returned, or to the collection of column names returned."
   ([results]
-    (::query (meta results)))
+    (:cantata/query (meta results)))
   ([results k]
-    (k (::query (meta results)))))
+    (k (:cantata/query (meta results)))))
 
 (defn prepare-query
   "Return a PreparedQuery record, which contains ready-to-execute SQL and
@@ -238,12 +242,27 @@
   like :?actor-name.)
 
   Unlike a JDBC PreparedStatement, a PreparedQuery record contains no
-  connection-specific information and can be reused at any time."
+  connection-specific information and can be reused at any time.
+
+  Query preparation may be cached if the data source has been configured to
+  do so (see `data-source`)."
   [ds q & opts]
-  (apply sql/prepare (force ds) (cds/get-data-model ds) q opts))
+  (if (qu/prepared? q)
+    q
+    (let [opts (concat opts [:quoting (cds/get-quoting ds)])]
+      (if-let [qcache (cds/get-query-cache ds)]
+        (if-let [e (find @qcache q)]
+          (val e)
+          (let [pq (apply qp/prepare-query
+                          (cds/get-data-model ds) q opts)]
+            (swap! qcache assoc q pq)
+            pq))
+       (apply qp/prepare-query
+              (cds/get-data-model ds) q opts)))))
 
 (defn with-query-rows*
-  "Helper function for with-query-rows"
+  "Low level querying function that returns rows and cols. All querying
+  funnels through here."
   ([ds q body-fn]
     (with-query-rows* ds q nil body-fn))
   ([ds q opts body-fn]
@@ -251,16 +270,8 @@
           opts (if (map? opts)
                  (apply concat opts)
                  opts)
-          q (or (when (sql/prepared? q)
-                  q)
-                (when-let [qcache (cds/get-query-cache ds)]
-                  (if-let [e (find @qcache q)]
-                    (val e)
-                    (let [pq (apply prepare-query (force ds) q opts)]
-                      (swap! qcache assoc q pq)
-                      pq)))
-                q)
-          ret (apply sql/query (force ds) dm q body-fn opts)
+          pq (apply prepare-query ds q opts)
+          ret (apply cjd/query (force ds) dm pq body-fn opts)
           qmeta (query-meta (if (vector? (first ret))
                               (first ret)
                               ret))]
@@ -285,7 +296,7 @@
       (with-query-rows* ds q opts
         (fn [cols rows]
           (body-fn (with-meta
-                     (map #(cq/build-result-map cols % ds-opts)
+                     (map #(qu/build-result-map cols % ds-opts)
                           rows)
                      (meta cols))))))))
 
@@ -297,13 +308,13 @@
                               ~@body)))
 
 ;; TODO: public version that works on arbitrary vector/map data, sans meta data
-(defn ^:private nest
+(defn ^:private nest-results
   ([cols rows & {:keys [ds-opts]}]
     (let [{:keys [from env added-paths]} (query-meta cols)
           opts (merge ds-opts
                       {:added-paths (set added-paths)})]
       (with-meta
-        (cq/nest cols rows from env opts)
+        (qn/nest-results cols rows from env opts)
         (meta cols)))))
 
 (defn ^:private flat-query [ds q & [{:keys [vectors] :as opts}]]
@@ -321,15 +332,15 @@
     (throw-info "Cannot execute flat queries with :strategy :multiple" {:q q}))
   (when (:vectors opts)
     (throw-info "Cannot execute vector queries with :strategy :multiple" {:q q}))
-  (when (sql/plain-sql? q)
+  (when (qu/plain-sql? q)
     (throw-info "Cannot execute plain SQL queries with :strategy :multiple" {:q q}))
-  (when (sql/prepared? q)
+  (when (qu/prepared? q)
     (throw-info "Cannot execute prepared queries with :strategy :multiple; use query instead" {:q q}))
   (let [dm (cds/get-data-model ds)
         opts* (apply concat (dissoc opts :strategy))
         query-fn (fn [q & opts]
                    (apply query ds q opts*))]
-    (apply cq/multi-query query-fn dm q opts*)))
+    (apply qs/multi-query query-fn dm q opts*)))
 
 (defn query
   "Executes query `q` against data source `ds`. The query can be one of the
@@ -377,11 +388,11 @@
   [ds q & {:keys [strategy flat vectors force-pk] :as opts}]
   (if (= :multiple strategy)
     (multi-query ds q opts)
-    (if (or flat vectors (sql/plain-sql? q))
+    (if (or flat vectors (qu/plain-sql? q))
       (flat-query ds q opts)
       (with-query-rows* ds q (assoc opts :force-pk (not (false? force-pk)))
         (fn [cols rows]
-          (nest cols rows :ds-opts (cds/get-options ds)))))))
+          (nest-results cols rows :ds-opts (cds/get-options ds)))))))
 
 (defn query1
   "Like `query` but returns the first result. If :strategy is :multiple, limits
@@ -390,7 +401,7 @@
   [ds q & opts]
   (let [optsm (apply hash-map opts)
         q (if (= :multiple (:strategy optsm))
-            (sql/add-limit-1 q)
+            (qu/add-limit-1 q)
             q)
         ret (apply query ds q opts)]
     (if (:vectors optsm)
@@ -405,14 +416,20 @@
   to return the count of ALL rows, including to-many rows with redundant
   top-level values."
   [ds q & opts]
-  (apply sql/query-count (force ds) (cds/get-data-model ds) q opts))
+  (let [opts (concat opts [:quoting (cds/get-quoting ds)
+                           :vectors true])
+        pq (apply prepare-query ds q opts)
+        pqc (apply qp/prepare-count-query (cds/get-data-model ds) pq opts)
+        [_ rows] (apply query ds pqc opts)]
+    (ffirst rows)))
 
 (defn by-id
   "Fetches the entity record from the data source whose primary key value is
-  equal to `id`.Query clauses from `q` will be merged into the generated query."
+  equal to `id`. Query clauses from `q` will be merged into the generated
+  query."
   [ds ename id & [q & opts]]
   (let [ent (cdm/entity (cds/get-data-model ds) ename)
-        baseq {:from ename :where (cq/build-key-pred (:pk ent) id)}]
+        baseq {:from ename :where (qb/build-key-pred (:pk ent) id)}]
     (apply query1 ds (if (map? q)
                        [baseq q]
                        (cons baseq q))
@@ -433,7 +450,7 @@
   ([path]
     #(getf % path))
   ([qr path]
-    (cq/getf qr path)))
+    (qu/getf qr path)))
 
 (defn getf1
   "Returns a nested field value from the given query result or results,
@@ -465,10 +482,10 @@
   [ds q & opts]
   (let [res (apply query ds q opts)
         env (query-meta res :env)
-        f1name (cq/first-select-field q)]
-    (if (= f1name (-> f1name env :root :name))
+        f1name (qu/first-select-field q)]
+    (if (= f1name (get-in env [f1name :root :name]))
       res
-      (getf res (-> f1name env :final-path)))))
+      (getf res (get-in env [f1name :final-path])))))
 
 (defn queryf1
   "Same as query, but additionally calls getf1 using the first selected path.
@@ -481,17 +498,6 @@
 
 ;;;;
 
-(defn expand-query
-  "Given a data source or data model, and a query, expands any implicit joins
-  and wildcards. Returns a vector of the expanded query and a map of
-  resolved paths."
-  [ds-or-dm q & opts]
-  (let [[ds dm] (if (cdm/data-model? ds-or-dm)
-                  [nil ds-or-dm]
-                  [ds-or-dm nil])
-        dm (or dm (cds/get-data-model ds))]
-    (apply cq/expand-query dm q opts)))
-
 (defn to-sql
   "Returns a clojure.java.jdbc-compatible [sql params] vector for the given
   query."
@@ -499,11 +505,15 @@
   (let [[ds dm] (if (cdm/data-model? ds-or-dm)
                   [nil ds-or-dm]
                   [ds-or-dm nil])
-        dm (or dm (cds/get-data-model ds))]
-    (apply sql/to-sql q
-           :data-model dm
-           :quoting (when ds (cds/get-quoting ds))
-           opts)))
+        opts (concat opts [:force-pk false])
+        optsm (apply hash-map opts)]
+    (if ds
+      (cjd/populate-sql-params
+        ds (apply prepare-query ds q opts) (:params opts))
+      (apply qp/to-sql
+             q
+             :data-model dm
+             opts))))
 
 ;;;;
 
@@ -550,8 +560,8 @@
   [& body]
   `(binding [cu/*verbose* true]
      ;; Hack
-     (with-redefs [jd/db-do-prepared sql/db-do-prepared-hook
-                   jd/db-do-prepared-return-keys sql/db-do-prepared-return-keys-hook]
+     (with-redefs [jd/db-do-prepared cjd/db-do-prepared-hook
+                   jd/db-do-prepared-return-keys cjd/db-do-prepared-return-keys-hook]
        ~@body)))
 
 (defmacro with-debug
@@ -675,7 +685,7 @@
                             {:ename ename}))
         ms* (map #(prep-map ds ent % validate) ms)
         ms* (cds/maybe-invoke-hook ms* ds ent :before-insert ms*)]
-    (let [ret-keys (sql/insert! (force ds) dm ename ms* :return-keys return-keys)
+    (let [ret-keys (cjd/insert! (force ds) dm ename ms* :return-keys return-keys)
           ret (if (sequential? m-or-ms)
                 ret-keys
                 (first ret-keys))]
@@ -697,7 +707,7 @@
         [values* pred] (cds/maybe-invoke-hook
                          [values* pred]
                          ds ent :before-update values* pred)]
-    (let [ret (sql/update! (force ds) dm ename values* pred)]
+    (let [ret (cjd/update! (force ds) dm ename values* pred)]
       (cds/maybe-invoke-hook ret ds ent :after-update values* pred ret))))
 
 (defn delete!
@@ -713,7 +723,7 @@
                   (throw-info ["Unrecognized entity" ename]
                               {:ename ename}))
           pred (cds/maybe-invoke-hook pred ds ent :before-delete pred)]
-      (let [ret (sql/delete! (force ds) dm ename pred)]
+      (let [ret (cjd/delete! (force ds) dm ename pred)]
         (cds/maybe-invoke-hook ret ds ent :after-delete pred ret)))))
 
 (defn cascading-delete!
@@ -741,7 +751,7 @@
   (let [dm (cds/get-data-model ds)
         ent (cdm/entity dm ename)
         ids (cu/seqify id-or-ids)]
-    (delete! ds ename (cq/build-key-pred (:pk ent) ids))))
+    (delete! ds ename (qb/build-key-pred (:pk ent) ids))))
 
 (defn cascading-delete-ids!
   "Deletes any dependent records and then deletes the entity record for the
@@ -763,8 +773,8 @@
                      ds [:from dep-name
                          :select (cdm/normalize-pk dep-pk)
                          :where [:and
-                                 (cq/build-key-pred (:key dep-rel) other-rk)
-                                 (cq/build-key-pred other-pk id-or-ids)]])]
+                                 (qb/build-key-pred (:key dep-rel) other-rk)
+                                 (qb/build-key-pred other-pk id-or-ids)]])]
         (doseq [del-m del-ms]
           (cascading-delete-ids! ds dep-name (cdm/pk-val del-m dep-pk))))))
   (delete-ids! ds ename id-or-ids))
@@ -826,7 +836,7 @@
         old-vms (flat-query
                   ds [:from (:name vent)
                       :select vpk
-                      :where (cq/build-key-pred vfk id)])
+                      :where (qb/build-key-pred vfk id)])
         old-rids (map #(cdm/pk-val % vrfk) old-vms)
         rids (doall
               (for [rm rms]
@@ -839,7 +849,7 @@
                                (assoc-pk vrfk rid))))
     ;; Only recs in the junction table are removed; NOT from the rel table
     (when (seq rem-rids)
-      (delete! ds (:name vent) (cq/build-key-pred
+      (delete! ds (:name vent) (qb/build-key-pred
                                  [vfk vrfk]
                                  (map vector (repeat id) rem-rids))))
     true))
@@ -854,7 +864,7 @@
           fk (or (:other-key rel) rpk)
           rename (:name rent)
           old-rms (flat-query
-                    ds [:from rename :select rpk :where (cq/build-key-pred fk id)])
+                    ds [:from rename :select rpk :where (qb/build-key-pred fk id)])
           rids (doall
                 (for [rm rms]
                   (save! ds (:name rent) (assoc-pk rm fk id))))
@@ -973,15 +983,15 @@
                        ds [:from dep-name
                            :select (cdm/normalize-pk dep-pk)
                            :where [:and
-                                   (cq/build-key-pred (:key dep-rel) other-rk)
-                                   (cq/build-key-pred other-pk id-to-merge)]])]
+                                   (qb/build-key-pred (:key dep-rel) other-rk)
+                                   (qb/build-key-pred other-pk id-to-merge)]])]
           (doseq [mod-m mod-ms]
             (let [dep-id (cdm/pk-val mod-m dep-pk)]
               (if (= dep-pk (:key dep-rel))
                 (merge-and-delete! ds dep-name id-to-keep dep-id)
                 (update! ds dep-name
                          (assoc-pk {} (:key dep-rel) id-to-keep)
-                         (cq/build-key-pred dep-pk dep-id))))))))
+                         (qb/build-key-pred dep-pk dep-id))))))))
     (delete-ids! ds ename id-to-merge)))
 
 ;;;;
@@ -990,9 +1000,9 @@
   "Returns a raw SQL string fragment. Using this in queries could cause
   strange behavior."
   [s]
-  (hsql/raw s))
+  (qu/raw s))
 
 (defn call
   "Returns a SQL call for embedding in queries; fn-name should be a keyword"
   [fn-name & args]
-  (apply hsql/call fn-name args))
+  (apply qu/call fn-name args))

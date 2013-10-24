@@ -8,16 +8,6 @@
 
 (set! *warn-on-reflection* true)
 
-(defn guess-db-name
-  "Given an entity name, tries to guess the table name"
-  [ename]
-  (string/replace (name ename) "-" "_"))
-
-(defn guess-rel-key
-  "Given a rel name, tries to guess the name of the foreign key"
-  [rname]
-  (keyword (str (name (cu/last-part rname)) "-id")))
-
 (defn identifier
   "Transforms a name from database lingo into a nice, lower-case Clojure
   keyword with dashes"
