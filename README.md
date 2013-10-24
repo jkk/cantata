@@ -256,7 +256,7 @@ Example (map format):
               :rels [:film :actor]}}
 ```
 
-Entity descriptor maps can contain the following keys:
+__Entity__ descriptor maps can contain the following keys:
 
          :name - entity name, a keyword (optional for map format)
            :pk - name(s) of primary key field(s); default: name of first field
@@ -271,7 +271,7 @@ Entity descriptor maps can contain the following keys:
                  default: entity name with dashes converted to underscores
     :db-schema - optional string name of table schema in SQL database
 
-Field specs can be keywords or maps. A keyword is equivalent to a map with
+__Field__ specs can be keywords or maps. A keyword is equivalent to a map with
 only the `:name` key set. The following map keys are accepted:
 
          :name - field name, a keyword
@@ -284,7 +284,7 @@ only the `:name` key set. The following map keys are accepted:
                  default: field name with dashes converted to underscores
       :db-type - optional string type of corresponding column in SQL database
 
-Relationship (rel) specs can be keywords or maps. A keyword is equivalent to
+__Relationship__ (rel) specs can be keywords or maps. A keyword is equivalent to
 a map with only the `:name` key set. The following map keys are accepted:
 
          :name - rel name, a keyword
@@ -303,10 +303,10 @@ If there is more than one reverse relationship created with the same name,
 each will be prefixed with an underscore and the name of the relationship
 to ensure uniqueness, like so: `:_rel-name.entity-name`.
 
-Shortcuts take the form of a map of shortcut path to target path. Target
+__Shortcuts__ take the form of a map of shortcut path to target path. Target
 paths can point to rels or fields.
 
-Hooks are experimental and may change in future versions. They take the form
+Hooks are __experimental__ and may change in future versions. They take the form
 of a map from hook name to hook function. Available hooks and their
 corresponding arguments and expected return values:
 

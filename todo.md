@@ -1,13 +1,10 @@
-- have ALL queries go through prepare-query
+- test playground with latest version
 - traverse into SqlCalls to qualify fields
-	- how to distinguish fields from other args for special fns?
 - bug: can't combine :with and :include when one is a subpath of the other
 	- have to handle each sucessive shortest path, regardless of clause?
 - prismatic's schema to validate records and other bits
 - consider lazy fetching strategy
 	- disinclined to provide it as an option - implicit n+1 nastiness
-- multiple data source types?
-	- jdbc, pure clojure, datomic(??)
 - user guide
 	- rel loading: http://docs.sqlalchemy.org/en/latest/orm/loading.html
 - subquery rel loading strategy?
@@ -22,7 +19,7 @@
 	- crib from https://github.com/hiredman/bytes/blob/master/src/com/thelastcitadel/bytes.clj
 	- can use staff picture from original sakila data to test
 - custom :on rel clause
-- inner join when implicit joins in :where and nil not used
+- optimization: inner join when implicit joins in :where and nil not used
 - postgres array support
 	- reify java.sql.Array?
 	- see http://tech.valgog.com/2009/02/passing-arrays-to-postgresql-database.html
@@ -39,7 +36,6 @@
 	- must add them to qenv
 - marshal values in :where according to field types
 	- pair up values with fields? impossible to do generically? good enough?
-- ::query-cache ds key?
 - rel reversal fn
 - have expand-query return all final paths, so it matches query results?
 - move hooks into data source?
@@ -64,5 +60,8 @@
 - verily validations?
 - handle certain DB data types better
 	- mysql set/enum, psql enum -- can't represent as keywords; special enum wrapper type?
+- move manip fns to own ns
 - data source protocols? pure clojure data source??
 - see htsql for possible future extensions: http://htsql.org/doc/overview.html#in-sql-modest-complexity-is-painful
+- multiple data source types?
+	- jdbc, pure clojure, datomic(??)
