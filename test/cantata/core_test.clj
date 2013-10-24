@@ -128,7 +128,7 @@
         kid-film-q {:from :film
                     :where [:and
                             [:in :rating ["G" "PG"]]
-                            [:< 90 :length 100]]
+                            [:< :?low :length :?high]]
                     :limit 5}
         rev-lang-q [:from :language :select [:name :_language.film.id]]
         cat-counts-q [:from :category
@@ -150,7 +150,7 @@
       (set (c/queryf ds [:select :film.actor :where [:= 123 :id]])) (set [{:name "KIRSTEN AKROYD", :id 92} {:name "WALTER TORN", :id 102} {:name "ANGELA WITHERSPOON", :id 144} {:name "REESE WEST", :id 197}])
       (c/query1 ds "select * from actor where id = 1") {:name "PENELOPE GUINESS", :id 1}
       (c/query1 ds ["select id from category where name=?" "Action"]) {:id 1}
-      (count (c/query ds kid-film-q)) 5
+      (count (c/query ds kid-film-q :params {:low 90 :high 100})) 5
       (setify (c/query ds [:from :film :select [:id :title :actor] :where [:= 1 :id]] :flat true)) (setify '({:actor.name "PENELOPE GUINESS", :actor.id 1, :title "ACADEMY DINOSAUR", :id 1} {:actor.name "CHRISTIAN GABLE", :actor.id 10, :title "ACADEMY DINOSAUR", :id 1} {:actor.name "LUCILLE TRACY", :actor.id 20, :title "ACADEMY DINOSAUR", :id 1} {:actor.name "SANDRA PECK", :actor.id 30, :title "ACADEMY DINOSAUR", :id 1} {:actor.name "JOHNNY CAGE", :actor.id 40, :title "ACADEMY DINOSAUR", :id 1} {:actor.name "MENA TEMPLE", :actor.id 53, :title "ACADEMY DINOSAUR", :id 1} {:actor.name "WARREN NOLTE", :actor.id 108, :title "ACADEMY DINOSAUR", :id 1} {:actor.name "OPRAH KILMER", :actor.id 162, :title "ACADEMY DINOSAUR", :id 1} {:actor.name "ROCK DUKAKIS", :actor.id 188, :title "ACADEMY DINOSAUR", :id 1} {:actor.name "MARY KEITEL", :actor.id 198, :title "ACADEMY DINOSAUR", :id 1}))
       (count (c/getf :_language.film (c/query ds rev-lang-q))) 500
       cn1 cn2
