@@ -249,15 +249,15 @@
   [ds q & opts]
   (if (qu/prepared? q)
     q
-    (let [opts (concat opts [:quoting (cds/get-quoting ds)])]
+    (let [opts (concat opts [:quoting (cds/get-quoting ds)])] ;cacheable?
       (if-let [qcache (cds/get-query-cache ds)]
-        (if-let [e (find @qcache q)]
+        (if-let [e (find @qcache q)] ;cached?
           (val e)
-          (let [pq (apply qp/prepare-query
+          (let [pq (apply qp/prepare-query ;not cached
                           (cds/get-data-model ds) q opts)]
             (swap! qcache assoc q pq)
             pq))
-       (apply qp/prepare-query
+       (apply qp/prepare-query ;not cacheable
               (cds/get-data-model ds) q opts)))))
 
 (defn with-query-rows*

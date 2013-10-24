@@ -1,5 +1,5 @@
 (ns cantata.query.strategy
-  "Implementations of query strategies"
+  "Implementations of query fetching strategies"
   (:require [cantata.data-model :as dm]
             [cantata.query.build :as qb]
             [cantata.query.util :as qu]
