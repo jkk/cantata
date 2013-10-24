@@ -429,6 +429,9 @@
   query."
   [ds ename id & [q & opts]]
   (let [ent (cdm/entity (cds/get-data-model ds) ename)
+        [q opts] (if (keyword? q)
+                   [nil (cons q opts)]
+                   [q opts])
         baseq {:from ename :where (qb/build-key-pred (:pk ent) id)}]
     (apply query1 ds (if (map? q)
                        [baseq q]
