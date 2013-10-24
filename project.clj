@@ -5,7 +5,7 @@
   :dependencies [[org.clojure/clojure "1.5.1"]
                  [org.flatland/ordered "1.5.1"]
                  [honeysql "0.4.2"]
-                 [org.clojure/java.jdbc "0.3.0-alpha4"]
+                 [org.clojure/java.jdbc "0.3.0-alpha5"]
                  [c3p0/c3p0 "0.9.1.2"]
                  [joda-time "2.2"]]
   :profiles {:dev {:resource-paths ["dev-resources"]
