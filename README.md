@@ -83,15 +83,16 @@ The following query fetches the film with id 1, plus related language and actor 
              {:name "LUCILLE TRACY", :id 20}]}]
 ```
 
-Queries are made of immutable data, and can be amended on the fly:
+Queries are made of data, and can be amended on the fly with extra clauses or parameters:
 
 ```clj
 (def kid-film {:from :film
                :where [:and
                        [:in :rating ["G" "PG"]]
-                       [:< 90 :length 100]]})
+                       [:< :?low :length :?high]]})
 
-(c/query ds [kid-film :select [:title :release-year] :limit 3])
+(c/query ds [kid-film :select [:title :release-year] :limit 3]
+            :params {:low 90 :high 100}])
 
 => [{:title "ARMAGEDDON LOST" :release-year 2006}
     {:title "BILL OTHERS" :release-year 2006}
@@ -118,7 +119,7 @@ You can tell Cantata to fetch data from related tables in multiple database roun
          :strategy :multiple)
 ```
 
-Of course, when selecting data from one-to-many or many-to-many relationships, you should keep database impact in mind. Single round trips are best when you're selecting a small number of columns from the target table, because each top-level row gets repeated for each related row in the result set (setting the `:flat` query option to true will show this). Multiple round trips prevent reptition of top-level rows but you pay for each trip. Cantata assumes you know what you're doing. Don't shoot your foot off!
+Of course, when selecting data from one-to-many or many-to-many relationships, you should keep database impact in mind. Single round trips are best when you're selecting a small number of columns from the target table, because each top-level row gets repeated for each related row in the result set (setting the `:flat` query option to true will show this). Multiple round trips prevent repetition of top-level rows but you pay for each trip. Cantata assumes you know what you're doing. Don't shoot your foot off!
 
 Joins can always be made explicit, which overrides implicit joins of the same name:
 
@@ -223,7 +224,7 @@ You can use multiple data sources or data models simultaneously, in different co
 
 ### Drawbacks
 
-* Query expansion overhead - see `prepare-query` for a way to mitigate this
+* Query expansion overhead - see `prepare-query` and query caching options for ways to mitigate this
 * Query result processing overhead - not too bad, but there's room for improvement
 * Executed SQL may not always be optimal
 * Some queries may be awkward or impossible to express in the Cantata query format
