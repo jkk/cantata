@@ -224,6 +224,7 @@ You can use multiple data sources or data models simultaneously, in different co
 
 ### Drawbacks
 
+* An extra layer of abstraction between you and the database
 * Query expansion overhead - see `prepare-query` and query caching options for ways to mitigate this
 * Query result processing overhead - not too bad, but there's room for improvement
 * Executed SQL may not always be optimal
