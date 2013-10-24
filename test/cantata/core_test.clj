@@ -70,15 +70,16 @@
                        :country-name :country.country}}})
 
 #_(defonce ds
-  (delay
-    (c/data-source
-      h2-spec model
-      :init-fn setup-db!
-      :reflect true
-      ;:pooled true
-      :clob-str true
-      :blob-bytes true
-      :joda-dates true)))
+   (delay
+     (c/data-source
+       h2-spec model
+       :init-fn setup-db!
+       :reflect true
+       ;:pooled true
+       :clob-str true
+       :blob-bytes true
+       :joda-dates true
+       :query-cache (atom {}))))
 
 (def ds nil) ;will be redef'd for test runs
 
