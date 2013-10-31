@@ -222,13 +222,14 @@ Custom types can be defined by implementing Cantata multimethods and protocols.
 
 You can use multiple data sources or data models simultaneously, in different configurations. They will not step on each other because Cantata has no global state. Any state Cantata does have is confined to the data source (database connection, pool, etc.). Data models are immutable.
 
-### Drawbacks
+## Reasons Not to Use Cantata
 
 * An extra layer of abstraction between you and the database
-* Query expansion overhead - see `prepare-query` and query caching options for ways to mitigate this
-* Query result processing overhead - not too bad, but there's room for improvement
+* Query expansion overhead (see `prepare-query` and query caching options for ways to mitigate this)
+* Query result processing overhead (not too bad, but there's room for improvement)
 * Executed SQL may not always be optimal
 * Some queries may be awkward or impossible to express in the Cantata query format
+* Hefty implementation (~5 KLOC)
 
 ## Playground Project
 

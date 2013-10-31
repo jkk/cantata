@@ -1,3 +1,4 @@
+- playground: logging, query cache
 - test playground with latest version
 - traverse into SqlCalls to qualify fields
 - bug: can't combine :with and :include when one is a subpath of the other
