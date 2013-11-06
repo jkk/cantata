@@ -55,7 +55,10 @@
                                            i (int 1)]
                                       (if (< col-count i)
                                         (row-fn (persistent! row))
-                                        (recur (conj! row (.getObject rs i))
+                                        (recur (conj! row
+                                                      (jd/result-set-read-column
+                                                        (.getObject rs i)
+                                                        rsmeta i))
                                                (unchecked-inc-int i))))))
                  (persistent! rows)))]
     (cons keys rows)))
