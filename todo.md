@@ -1,3 +1,4 @@
+- more concise printable representation for data model / prepared query?
 - playground: logging, query cache
 - test playground with latest version
 - traverse into SqlCalls to qualify fields
