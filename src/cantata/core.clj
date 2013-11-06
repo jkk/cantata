@@ -559,7 +559,7 @@
 
 (defmacro verbose
   "Causes any wrapped queries or statements to print lots of low-level database
-  logging information during execution. See also `debug`"
+  logging information during execution. See also `with-debug`"
   [& body]
   `(binding [cu/*verbose* true]
      ;; Hack
