@@ -124,7 +124,6 @@ Of course, when selecting data from one-to-many or many-to-many relationships, y
 Joins can always be made explicit, which overrides implicit joins of the same name:
 
 ```clj
-;; No nesting
 (c/query
   ds [:from :film
       :select [:title :actor.name]
