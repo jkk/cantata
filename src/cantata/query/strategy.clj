@@ -19,9 +19,7 @@
     (let [q {:select (concat (remove (set fields) npk)
                              fields)
              :from (:name ent)
-             :where (qb/build-key-pred pk ids)
-             :modifiers [:distinct]
-             :order-by pk}
+             :where (qb/build-key-pred pk ids)}
           maps (apply query-fn q opts)
           qual-parts (cu/split-path qual)
           qual-revs (qu/get-qual-parts-reverses qual qual-parts env)]
