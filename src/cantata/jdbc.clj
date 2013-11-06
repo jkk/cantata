@@ -11,7 +11,8 @@
             [cantata.query.qualify :as qq]
             [clojure.java.jdbc :as jd]
             [honeysql.core :as hq]
-            [clojure.string :as string]))
+            [clojure.string :as string])
+  (:import [java.sql ResultSet ResultSetMetaData]))
 
 (set! *warn-on-reflection* true)
 
@@ -41,6 +42,24 @@
         marshaller (cds/get-marshaller ds)]
     (into [sql] (map marshaller sql-params))))
 
+(defn ^:private process-resultset [^ResultSet rs row-fn]
+  (let [rsmeta ^ResultSetMetaData (.getMetaData rs)
+        col-count (int (.getColumnCount rsmeta))
+        keys (->> (range 1 (inc col-count))
+               (map (fn [^Integer i] (.getColumnLabel rsmeta i)))
+               (#'jd/make-cols-unique)
+               (mapv (comp keyword dasherize)))
+        rows (loop [rows (transient [])]
+               (if (.next rs)
+                 (recur (conj! rows (loop [row (transient [])
+                                           i (int 1)]
+                                      (if (< col-count i)
+                                        (row-fn (persistent! row))
+                                        (recur (conj! row (.getObject rs i))
+                                               (unchecked-inc-int i))))))
+                 (persistent! rows)))]
+    (cons keys rows)))
+
 (defn query
   "Implementation of cantata.core/query"
   [ds dm prepared-q callback & {:keys [params]}]
@@ -55,10 +74,14 @@
         jdbc-q (populate-sql-params ds prepared-q params)
         _ (when cu/*verbose* (prn jdbc-q))
         row-fn (get-row-fn ds eq from-ent env)
-        [cols & rows] (jd/query ds jdbc-q
-                                :identifiers dasherize
-                                :row-fn row-fn
-                                :as-arrays? true)
+        [cols & rows] (jd/db-query-with-resultset
+                        ds jdbc-q
+                        (^{:once true} fn*
+                          [rset] (process-resultset rset row-fn)))
+                      #_(jd/query ds jdbc-q
+                              :identifiers dasherize
+                              :row-fn row-fn
+                              :as-arrays? true)
         qmeta {:cantata/query {:from from-ent
                                :env env
                                :expanded eq
