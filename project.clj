@@ -12,4 +12,10 @@
   :profiles {:dev {:resource-paths ["dev-resources"]
                    :dependencies [[mysql/mysql-connector-java "5.1.26"]
                                   [org.postgresql/postgresql "9.2-1003-jdbc4"]
-                                  [com.h2database/h2 "1.3.173"]]}})
+                                  [com.h2database/h2 "1.3.173"]
+                                  [org.clojure/tools.logging "0.2.6"]
+                                  [log4j "1.2.17" :exclusions [javax.mail/mail
+                                                               javax.jms/jms
+                                                               com.sun.jdmk/jmxtools
+                                                               com.sun.jmx/jmxri]]
+                                  [org.slf4j/slf4j-log4j12 "1.7.5"]]}})
