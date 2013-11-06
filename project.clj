@@ -1,4 +1,4 @@
-(defproject cantata "0.1.8-SNAPSHOT"
+(defproject cantata "0.1.8"
   :description "SQL and database abstraction"
   :url "https://github.com/jkk/cantata"
   :license {:name "Eclipse Public License"
