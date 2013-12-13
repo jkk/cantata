@@ -512,7 +512,7 @@
         optsm (apply hash-map opts)]
     (if ds
       (cjd/populate-sql-params
-        ds (apply prepare-query ds q opts) (:params opts))
+        ds (apply prepare-query ds q opts) (:params optsm))
       (apply qp/to-sql
              q
              :data-model dm
