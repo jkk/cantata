@@ -12,3 +12,17 @@
 (defrecord ResolvedPath [final-path root chain resolved shortcuts])
 (defrecord AggOp [op path resolved-path])
 (defrecord PreparedQuery [expanded-query env sql param-names param-values added-paths])
+
+(defrecord Elided [])
+
+(defmethod print-method Elided [^Elided o ^java.io.Writer w]
+  (.write w "#<Elided>"))
+
+(defmethod print-dup Elided [o w]
+   (print-method o w))
+
+(def elided (Elided.))
+
+(defmethod print-method PreparedQuery [o ^java.io.Writer w]
+  (.write w (pr-str (assoc (into {} o)
+                           :env elided))))

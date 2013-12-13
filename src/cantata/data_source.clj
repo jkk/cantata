@@ -6,7 +6,8 @@
             [cantata.util :refer [throw-info]]
             [cantata.protocols :as cp]
             [clojure.java.jdbc :as jd]
-            [clojure.string :as string])
+            [clojure.string :as string]
+            [clojure.core.cache :as cache])
   (:import com.mchange.v2.c3p0.ComboPooledDataSource))
 
 (set! *warn-on-reflection* true)
@@ -103,7 +104,9 @@
                   ::quoting (if (contains? opts :quoting)
                               (:quoting opts)
                               (detect-quoting ds))
-                  ::query-cache (:query-cache opts)
+                  ::query-cache (if (contains? opts :query-cache)
+                                  (:query-cache opts)
+                                  (atom (cache/lru-cache-factory {})))
                   ::hooks (:hooks opts)
                   ::marshaller (make-marshalling-fn opts marshal-fnmap)
                   ::unmarshaller (make-marshalling-fn opts unmarshal-fnmap))]

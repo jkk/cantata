@@ -135,7 +135,8 @@
                       left unspecified; set to nil to turn off quoting (this
                       will break many queries); :ansi, :mysql, or :sqlserver
        :query-cache - an atom that wraps a map-like object, such as a cache
-                      from clojure.core.cache; used to cache prepared queries
+                      from clojure.core.cache; used to cache prepared queries;
+                      default a 32-element LRU cache
              :hooks - data source-wide hooks; see `make-data-model` for
                       available hooks and format
           :max-idle - max pool idle time in seconds; default 30 mins
