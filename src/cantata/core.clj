@@ -532,6 +532,19 @@
                       binding)]
     `(jd/db-transaction [~ds-sym (force ~ds)] ~@body)))
 
+(defmacro with-connection
+  "Opens a connection, binding the connection-bearing db-spec to a given
+  symbol. If given a single symbol as the binding, creates a shadowing binding
+  with the same name."
+  [binding & body]
+  (let [[ds-sym ds] (if (symbol? binding)
+                      [binding binding]
+                      binding)]
+    `(let [ds# (force ~ds)]
+       (with-open [con# ^java.sql.Connection (jd/get-connection ds#)]
+         (let [~ds-sym (jd/add-connection ds# con#)]
+           ~@body)))))
+
 (defmacro rollback!
   "Signals that the current transaction should roll back on completion"
   [ds]
