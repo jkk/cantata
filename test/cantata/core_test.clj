@@ -79,7 +79,8 @@
        :clob-str true
        :blob-bytes true
        :joda-dates true
-       :query-cache (atom {}))))
+       ;:query-cache (atom {})
+       )))
 
 (def ds nil) ;will be redef'd for test runs
 
@@ -206,8 +207,8 @@
                         {:name :a :ename :a :key :grault :other-key :baz}]}}
         ds (c/data-source ds dm)
         expected-sql (if (= "mysql" (cds/get-subprotocol ds))
-                       ["SELECT `a`.`name` AS `a.qux` FROM `film` AS `f` LEFT JOIN `film_actor` AS `fa` ON `f`.`id` = `fa`.`film_id` LEFT JOIN `actor` AS `a` ON `fa`.`actor_id` = `a`.`id` WHERE 123 = `f`.`id`"]
-                       ["SELECT \"a\".\"name\" AS \"a.qux\" FROM \"film\" AS \"f\" LEFT JOIN \"film_actor\" AS \"fa\" ON \"f\".\"id\" = \"fa\".\"film_id\" LEFT JOIN \"actor\" AS \"a\" ON \"fa\".\"actor_id\" = \"a\".\"id\" WHERE 123 = \"f\".\"id\""])]
+                       ["SELECT `a`.`name` AS `a.qux` FROM `film` `f` LEFT JOIN `film_actor` `fa` ON `f`.`id` = `fa`.`film_id` LEFT JOIN `actor` `a` ON `fa`.`actor_id` = `a`.`id` WHERE 123 = `f`.`id`"]
+                       ["SELECT \"a\".\"name\" AS \"a.qux\" FROM \"film\" \"f\" LEFT JOIN \"film_actor\" \"fa\" ON \"f\".\"id\" = \"fa\".\"film_id\" LEFT JOIN \"actor\" \"a\" ON \"fa\".\"actor_id\" = \"a\".\"id\" WHERE 123 = \"f\".\"id\""])]
     (are=
       (c/to-sql ds [:select :f.a.qux :where [:= 123 :foo]]) expected-sql)))
 
@@ -290,7 +291,7 @@
                                                  [:in :user-id [:user.id :u2.id]]]}]]})]
     (are=
       (c/to-sql dm finalq :quoting :ansi)
-      ["SELECT \"user\".\"id\" AS \"id\", \"user\".\"username\" AS \"username\", \"u2\".\"id\" AS \"u2.id\", \"u2\".\"username\" AS \"u2.username\", \"a1\".\"id\" AS \"a1.id\", \"a1\".\"user_id\" AS \"a1.user_id\", \"a1\".\"street\" AS \"a1.street\", \"a1\".\"city\" AS \"a1.city\", \"a1\".\"state\" AS \"a1.state\", \"a1\".\"zip\" AS \"a1.zip\", \"a2\".\"id\" AS \"a2.id\", \"a2\".\"user_id\" AS \"a2.user_id\", \"a2\".\"street\" AS \"a2.street\", \"a2\".\"city\" AS \"a2.city\", \"a2\".\"state\" AS \"a2.state\", \"a2\".\"zip\" AS \"a2.zip\" FROM \"user\" AS \"user\" INNER JOIN \"user\" AS \"u2\" ON \"user\".\"id\" < \"u2\".\"id\" INNER JOIN \"addy\" AS \"a3\" ON \"user\".\"id\" = \"a3\".\"user_id\" INNER JOIN \"addy\" AS \"a4\" ON \"u2\".\"id\" = \"a4\".\"user_id\" INNER JOIN (SELECT \"addy\".\"id\" AS \"id\", \"addy\".\"user_id\" AS \"user_id\", \"addy\".\"street\" AS \"street\", \"addy\".\"city\" AS \"city\", \"addy\".\"state\" AS \"state\", \"addy\".\"zip\" AS \"zip\" FROM \"addy\" AS \"addy\" WHERE ? = \"addy\".\"city\" GROUP BY \"addy\".\"street\", \"addy\".\"city\", \"addy\".\"zip\" HAVING 2 = count(\"addy\".\"user_id\")) AS \"occ2\" ON (\"occ2\".\"street\" = \"a3\".\"street\" AND \"occ2\".\"city\" = \"a3\".\"city\" AND \"occ2\".\"state\" = \"a3\".\"state\" AND \"occ2\".\"zip\" = \"a3\".\"zip\" AND \"occ2\".\"street\" = \"a4\".\"street\" AND \"occ2\".\"city\" = \"a4\".\"city\" AND \"occ2\".\"state\" = \"a4\".\"state\" AND \"occ2\".\"zip\" = \"a4\".\"zip\") LEFT JOIN \"addy\" AS \"a1\" ON \"user\".\"id\" = \"a1\".\"user_id\" LEFT JOIN \"addy\" AS \"a2\" ON \"u2\".\"id\" = \"a2\".\"user_id\" WHERE NOT exists((SELECT \"user\".\"id\" AS \"id\" FROM \"addy\" AS \"addy\" WHERE (? <> \"addy\".\"city\" AND (\"addy\".\"user_id\" in (\"user\".\"id\", \"u2\".\"id\")))))" "New York" "New York"])))
+      ["SELECT \"user\".\"id\" AS \"id\", \"user\".\"username\" AS \"username\", \"u2\".\"id\" AS \"u2.id\", \"u2\".\"username\" AS \"u2.username\", \"a1\".\"id\" AS \"a1.id\", \"a1\".\"user_id\" AS \"a1.user_id\", \"a1\".\"street\" AS \"a1.street\", \"a1\".\"city\" AS \"a1.city\", \"a1\".\"state\" AS \"a1.state\", \"a1\".\"zip\" AS \"a1.zip\", \"a2\".\"id\" AS \"a2.id\", \"a2\".\"user_id\" AS \"a2.user_id\", \"a2\".\"street\" AS \"a2.street\", \"a2\".\"city\" AS \"a2.city\", \"a2\".\"state\" AS \"a2.state\", \"a2\".\"zip\" AS \"a2.zip\" FROM \"user\" \"user\" INNER JOIN \"user\" \"u2\" ON \"user\".\"id\" < \"u2\".\"id\" INNER JOIN \"addy\" \"a3\" ON \"user\".\"id\" = \"a3\".\"user_id\" INNER JOIN \"addy\" \"a4\" ON \"u2\".\"id\" = \"a4\".\"user_id\" INNER JOIN (SELECT \"addy\".\"id\" AS \"id\", \"addy\".\"user_id\" AS \"user_id\", \"addy\".\"street\" AS \"street\", \"addy\".\"city\" AS \"city\", \"addy\".\"state\" AS \"state\", \"addy\".\"zip\" AS \"zip\" FROM \"addy\" \"addy\" WHERE ? = \"addy\".\"city\" GROUP BY \"addy\".\"street\", \"addy\".\"city\", \"addy\".\"zip\" HAVING 2 = count(\"addy\".\"user_id\")) \"occ2\" ON (\"occ2\".\"street\" = \"a3\".\"street\" AND \"occ2\".\"city\" = \"a3\".\"city\" AND \"occ2\".\"state\" = \"a3\".\"state\" AND \"occ2\".\"zip\" = \"a3\".\"zip\" AND \"occ2\".\"street\" = \"a4\".\"street\" AND \"occ2\".\"city\" = \"a4\".\"city\" AND \"occ2\".\"state\" = \"a4\".\"state\" AND \"occ2\".\"zip\" = \"a4\".\"zip\") LEFT JOIN \"addy\" \"a1\" ON \"user\".\"id\" = \"a1\".\"user_id\" LEFT JOIN \"addy\" \"a2\" ON \"u2\".\"id\" = \"a2\".\"user_id\" WHERE NOT exists((SELECT \"user\".\"id\" AS \"id\" FROM \"addy\" \"addy\" WHERE (? <> \"addy\".\"city\" AND (\"addy\".\"user_id\" in (\"user\".\"id\", \"u2\".\"id\")))))" "New York" "New York"])))
 
 ;; From https://gist.github.com/3783529
 (deftest test-subqueries2
@@ -312,7 +313,7 @@
                                     [:< 0 :subtitle-count]]}]}]
     (are=
       (c/to-sql dm q)
-      ["SELECT language.id AS id, language.video_id AS video_id FROM language AS language INNER JOIN (SELECT version.language_id AS language_id, max(version.version_number) AS tip_version_number FROM version AS version GROUP BY version.language_id) AS tip_version ON tip_version.language_id = language.id WHERE exists((SELECT 1 FROM version AS version WHERE (version.language_id = language.id AND version.version_number = tip_version.tip_version_number AND 0 < version.subtitle_count)))"])))
+      ["SELECT language.id AS id, language.video_id AS video_id FROM language language INNER JOIN (SELECT version.language_id AS language_id, max(version.version_number) AS tip_version_number FROM version version GROUP BY version.language_id) tip_version ON tip_version.language_id = language.id WHERE exists((SELECT 1 FROM version version WHERE (version.language_id = language.id AND version.version_number = tip_version.tip_version_number AND 0 < version.subtitle_count)))"])))
 
 (comment
   

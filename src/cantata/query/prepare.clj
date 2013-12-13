@@ -11,7 +11,7 @@
 (defn to-sql
   "Transforms a Cantata query into a clojure.java.jdbc-compatible [sql params]
   vector, leveraging the provided data model and other information"
-  [q & {:keys [data-model quoting expanded env params]}]
+  [q & {:keys [data-model quoting expanded env params return-param-names]}]
   (cond
    (string? q) [q]
    (and (vector? q) (string? (first q))) q
@@ -22,42 +22,28 @@
                qq (qq/qualify-query eq quoting (or env {}))]
            (hq/format qq
                       :quoting quoting
-                      :params params))))
+                      :params params
+                      :return-param-names return-param-names))))
 
-;; TODO: prepared statements; need a way to manage open/close scope;
-;; maybe piggyback on transaction scope?
 (defn prepare-query
   "See cantata.core/prepare-query"
   [dm q & {:keys [quoting expanded env force-pk] :as opts}]
   (let [[eq env added-paths] (if (or expanded (qu/plain-sql? q))
                                [q env]
                                (qe/expand-query dm q :force-pk (not (false? force-pk))))
-        [sql & params] (apply to-sql eq
-                              :data-model dm
-                              :quoting quoting
-                              :expanded true
-                              :env env
-                              (apply concat (dissoc opts :params)))
-        param-counter (atom 0) ;for naming anonymous params
-        [param-names param-values]
-        (loop [ret []
-               params params
-               named-params (map qu/param-name
-                                 (filter qu/param? (keys env)))
-               param-values {}]
-          (if (empty? params)
-            [ret param-values]
-            (let [param (first params)]
-              (if (nil? param)
-                (recur (conj ret (first named-params))
-                       (rest params)
-                       (rest named-params)
-                       param-values)
-                (let [param-name (keyword (str "_" (swap! param-counter inc)))]
-                  (recur (conj ret param-name)
-                         (rest params)
-                         named-params
-                         (assoc param-values param-name param)))))))]
+        [sql params param-names] (cond
+                                   (string? eq) [eq]
+                                   (qu/plain-sql? eq) [(first eq) (rest eq)
+                                                       (map #(keyword (str "_" %))
+                                                            (range 1 (inc (count (rest eq)))))]
+                                   :else (apply to-sql eq
+                                                :data-model dm
+                                                :quoting quoting
+                                                :expanded true
+                                                :env env
+                                                :return-param-names true
+                                                (apply concat (dissoc opts :params))))
+        param-values (zipmap param-names params)]
     (r/->PreparedQuery eq env sql param-names param-values added-paths)))
 
 (defn prepare-count-query
