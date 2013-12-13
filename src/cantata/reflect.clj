@@ -31,7 +31,7 @@
 (defn reflect-catalogs
   "Returns information about catalog in a data source"
   [ds]
-  (jd/db-transaction
+  (jd/with-db-transaction
     [ds ds]
     (get-results
       (.getCatalogs (get-db-meta ds)))))
@@ -39,7 +39,7 @@
 (defn reflect-tables
   "Returns information about tables in a data source"
   [ds]
-  (jd/db-transaction
+  (jd/with-db-transaction
     [ds ds]
     (get-results
       (.getTables (get-db-meta ds) nil nil nil nil))))
@@ -49,7 +49,7 @@
   ([ds]
     (reflect-columns ds nil))
   ([ds table]
-    (jd/db-transaction
+    (jd/with-db-transaction
       [ds ds]
       (get-results
         (.getColumns (get-db-meta ds) nil nil table nil)))))
@@ -59,7 +59,7 @@
   ([ds]
     (reflect-foreign-keys ds nil))
   ([ds table]
-    (jd/db-transaction
+    (jd/with-db-transaction
       [ds ds]
       (get-results
         (.getImportedKeys (get-db-meta ds) nil nil table)))))
@@ -69,7 +69,7 @@
   ([ds]
     (reflect-primary-keys ds nil))
   ([ds table]
-    (jd/db-transaction
+    (jd/with-db-transaction
       [ds ds]
       (get-results
         (.getPrimaryKeys (get-db-meta ds) nil nil table)))))

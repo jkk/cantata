@@ -521,7 +521,7 @@
 ;;;;
 
 (defmacro with-transaction
-  "A light wrapper around clojure.java.jdbc/db-transaction.
+  "A light wrapper around clojure.java.jdbc/with-db-transaction.
 
   Begins a transaction, binding the connection-bearing db-spec to a given
   symbol. If given a single symbol as the binding, creates a shadowing binding
@@ -530,7 +530,7 @@
   (let [[ds-sym ds] (if (symbol? binding)
                       [binding binding]
                       binding)]
-    `(jd/db-transaction [~ds-sym (force ~ds)] ~@body)))
+    `(jd/with-db-transaction [~ds-sym (force ~ds)] ~@body)))
 
 (defmacro with-connection
   "Opens a connection, binding the connection-bearing db-spec to a given
