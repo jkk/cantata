@@ -1,4 +1,4 @@
-(defproject cantata "0.1.9"
+(defproject cantata "0.1.10"
   :description "SQL and database abstraction"
   :url "https://github.com/jkk/cantata"
   :license {:name "Eclipse Public License"
@@ -7,7 +7,7 @@
                  [org.clojure/core.cache "0.6.3"]
                  [org.flatland/ordered "1.5.1"]
                  [honeysql "0.4.3"]
-                 [org.clojure/java.jdbc "0.3.0-rc1"]
+                 [org.clojure/java.jdbc "0.3.2"]
                  [c3p0/c3p0 "0.9.1.2"]
                  [joda-time "2.2"]]
   :profiles {:dev {:resource-paths ["dev-resources"]
