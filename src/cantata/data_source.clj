@@ -22,8 +22,11 @@
   [db-spec]
   (cond
     (map? db-spec) db-spec
-    (string? db-spec) {:subprotocol (get-url-subprotocol db-spec)
-                       :connection-uri db-spec}
+    (string? db-spec) (let [db-spec ^String db-spec]
+                        {:subprotocol (get-url-subprotocol db-spec)
+                         :connection-uri (if-not (.startsWith db-spec "jdbc:")
+                                           (str "jdbc:" db-spec)
+                                           db-spec)})
     (instance? java.net.URI db-spec) (normalize-db-spec (str db-spec))
     :else (throw-info "Unrecognized db-spec format" {:db-spec db-spec})))
 

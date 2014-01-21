@@ -47,7 +47,7 @@ To get up and running quickly, you can let Cantata work out most of the data mod
 
 ```clj
 ;; Any clojure.java.jdbc compatible DB spec
-(def mysql-spec "jdbc:mysql://localhost/film_store")
+(def mysql-spec "mysql://localhost/film_store")
 
 ;; Shortcuts to supplement the reflected model
 (def model
