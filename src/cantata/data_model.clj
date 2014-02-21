@@ -139,7 +139,10 @@
         (-> ents
           (assoc-in [ename :rels rrname] rrel)
           ;; clear out the unqualified rel if necessary, to avoid ambiguity
-          (update-in [ename :rels rrname2] add-generic-reverse-rel rrel2))
+          (as-> ents
+                (if (= from ename)
+                  ents
+                  (update-in ents [ename :rels rrname2] add-generic-reverse-rel rrel2))))
         ents))))
 
 (declare validate-data-model data-model? entities fields rels shortcuts)
