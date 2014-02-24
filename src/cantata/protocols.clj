@@ -76,7 +76,7 @@
   String
   (parse-decimal [x] (bigdec x))
   nil
-  (parse-double [_] nil))
+  (parse-decimal [_] nil))
 
 (defprotocol ParseBoolean
   (parse-boolean [x]))
@@ -283,7 +283,7 @@
   String
   (marshal-decimal [x] (bigdec x))
   nil
-  (marshal-double [_] nil))
+  (marshal-decimal [_] nil))
 
 (defprotocol MarshalBoolean
   (marshal-boolean [x]))
