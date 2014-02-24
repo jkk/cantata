@@ -43,7 +43,7 @@
   [m & {:keys [this-pk this-name other-ents]}]
   (let [m (normalize-spec m)]
     (when-not (:name m)
-      (throw "No :name provided for rel" {:rel-spec m}))
+      (throw-info "No :name provided for rel" {:rel-spec m}))
     (r/map->Rel
       (let [name (:name m)
             ename (:ename m)
