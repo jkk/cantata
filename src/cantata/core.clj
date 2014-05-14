@@ -852,7 +852,7 @@
         vrfk (:key rel)
         old-vms (flat-query
                   ds [:from (:name vent)
-                      :select vpk
+                      :select [vpk vrfk]
                       :where (qb/build-key-pred vfk id)])
         old-rids (map #(cdm/pk-val % vrfk) old-vms)
         rids (doall
