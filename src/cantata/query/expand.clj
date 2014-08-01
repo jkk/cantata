@@ -143,7 +143,7 @@
       (assoc q join-clause (doall (distinct-joins
                                     (concat (join-clause q)
                                             joins)
-                                    already-joined))))))
+                                    #_already-joined))))))
 
 (defn ^:private expand-rel-joins [q env clause]
   (reduce
