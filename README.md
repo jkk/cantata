@@ -20,7 +20,7 @@ Use [Leiningen](http://leiningen.org/) and add this to your project's dependenci
 [cantata "0.1.17"]
 ```
 
-__This is an alpha release. API subject to change.__
+# THIS LIBRARY IS STILL BAKING. ITS API COULD CHANGE AT ANY TIME. IT MAY ALSO BE DISCONTINUED IF I DECIDE IT'S A BAD APPROACH.
 
 ## Crash Course
 
