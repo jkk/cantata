@@ -2,7 +2,7 @@
 
 ### Cantata
 
-Melodic SQL for Clojure:
+SQL and database abstraction for Clojure:
 
 * Relationship-aware querying and saving
 * Queries made of data
