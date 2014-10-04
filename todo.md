@@ -1,3 +1,8 @@
+- issues with explicit/implicit left/right joins
+- belongs-to and has-many names can conflict, silently suppress belongs-to
+- (queryf1 {:select %count.id}) doesn't work 
+- %count.* doesn't work
+- nil rel shows up if selecting a subrel (e.g. :transaction and :transaction.payment-type)
 - more concise printable representation for data model / prepared query?
 - playground: logging, query cache
 - test playground with latest version
